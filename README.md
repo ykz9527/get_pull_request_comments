@@ -39,6 +39,8 @@
 
 ## 安装依赖
 
+本项目默认使用 uv 作为 Python 包管理器和虚拟环境工具。
+
 ```bash
 uv venv --python 3.12 .venv
 source .venv/bin/activate
