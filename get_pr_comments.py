@@ -149,6 +149,7 @@ class GitHubPRCommentsFetcher:
                 totalCount
                 nodes {{
                   commit {{
+                    oid
                     message
                     committedDate
                     author {{
