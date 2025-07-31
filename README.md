@@ -15,6 +15,7 @@
 - 获取代码审查评论（包括行内评论）
 - 获取提交记录
 - 获取关联的问题
+- **可选获取文件完整代码内容**：支持获取PR中所有变更文件的修改前后完整内容
 - 支持命令行参数
 - 支持输出到控制台或保存到文件
 - JSON格式输出
@@ -33,8 +34,10 @@
 - 先获取PR ID列表，再循环获取每个PR的详细信息
 - 在每个PR详细信息中自动添加prID字段
 - 支持按状态过滤（OPEN、CLOSED、MERGED）
+- **可选批量获取代码内容**：支持为所有PR获取文件的完整代码内容
 - 显示处理进度和统计信息
 - 错误处理：单个PR失败不影响整体流程
+- 支持逐行写入模式防止内存溢出
 - 自动保存到JSON文件
 
 ## 安装依赖
@@ -136,6 +139,7 @@ python get_pr_comments.py <owner> <repo> <pr_number> [--output console|file] [--
 - `--output`: 输出文件名，不指定则输出到控制台
 - `--config`: 配置文件路径，默认为 `config.yaml`
 - `--token`: GitHub Personal Access Token文件路径，默认为 `PAT.token`
+- `--fetch-code-snippet`: 获取文件的完整代码内容（修改前后对比），默认不获取
 
 #### 使用示例
 ```bash
@@ -145,9 +149,56 @@ python get_pr_comments.py JabRef jabref 13553
 # 保存到文件
 python get_pr_comments.py JabRef jabref 13553 --output pr_data.json
 
+# 获取文件的完整代码内容（修改前后对比）
+python get_pr_comments.py JabRef jabref 13553 --fetch-code-snippet --output pr_data.json
+
 # 使用自定义配置文件和token文件
 python get_pr_comments.py JabRef jabref 13553 --output pr_data.json --config my_config.yaml --token my_token.token
 ```
+
+#### --fetch-code-snippet 参数说明
+
+`--fetch-code-snippet` 参数是一个可选功能，用于获取PR中所有变更文件的完整代码内容（修改前后对比）。
+
+**功能特点：**
+- 获取PR中每个变更文件的修改前完整内容（base版本）
+- 获取PR中每个变更文件的修改后完整内容（head版本）
+- 支持文本文件的完整内容获取
+- 自动识别二进制文件并标记
+- 提供文件大小信息
+
+**输出格式：**
+在每个文件节点中会添加 `fullContent` 对象，包含：
+```json
+{
+  "path": "src/example.java",
+  "additions": 10,
+  "deletions": 5,
+  "changeType": "MODIFIED",
+  "fullContent": {
+    "before": {
+      "text": "修改前的完整文件内容",
+      "byteSize": 1024,
+      "isBinary": false
+    },
+    "after": {
+      "text": "修改后的完整文件内容",
+      "byteSize": 1124,
+      "isBinary": false
+    }
+  }
+}
+```
+
+**使用建议：**
+- 默认不启用此功能，以提高执行速度和减少API调用
+- 对于大型PR或包含大文件的PR，会显著增加执行时间和输出文件大小
+
+**性能影响：**
+- 会为每个变更文件额外发起API请求
+- 增加网络传输时间和API配额消耗
+- 输出文件大小会显著增加
+- 对于包含大量文件变更的PR，建议谨慎使用
 
 ### 2. 获取PR ID列表或详细信息 (get_all_pr_brief.py)
 
@@ -205,6 +256,7 @@ python get_all_pr_comments.py <owner> <repo> [--states STATE1 STATE2 ...] [--out
 - `--config`: 配置文件路径（默认：config.yaml）
 - `--token`: GitHub Personal Access Token文件路径（默认：PAT.token）
 - `--store-by-line`: 逐行写入JSON数据以防止内存溢出（仅在明确指定 --output 时可用）
+- `--fetch-code-snippet`: 获取文件的完整代码内容（修改前后对比），默认不获取
 
 #### 使用示例
 
@@ -218,14 +270,17 @@ python get_all_pr_comments.py JabRef jabref --states MERGED CLOSED
 # 只获取开放状态的PR并指定输出文件
 python get_all_pr_comments.py JabRef jabref --states OPEN --output jabref_open_prs.json
 
+# 获取PR详细信息并包含文件的完整代码内容
+python get_all_pr_comments.py JabRef jabref --states MERGED --fetch-code-snippet --output jabref_merged_prs.json
+
 # 使用自定义配置文件和token文件
 python get_all_pr_comments.py JabRef jabref --config my_config.yaml --token my_token.token --output jabref_prs.json
 
 # 使用逐行写入模式防止内存溢出（适用于大量PR的情况）
 python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.jsonl --store-by-line
 
-# 结合状态过滤和逐行写入
-python get_all_pr_comments.py JabRef jabref --states OPEN --output jabref_open_prs.jsonl --store-by-line
+# 结合状态过滤、代码获取和逐行写入
+python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet --output jabref_open_prs.jsonl --store-by-line
 ```
 
 #### 输出格式

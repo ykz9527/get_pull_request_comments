@@ -320,7 +320,7 @@ class GitHubPRCommentsFetcher:
         
         return result
     
-    def fetch_pr_data(self, owner: str, repo: str, pr_number: int) -> str:
+    def fetch_pr_data(self, owner: str, repo: str, pr_number: int, fetch_code_snippet: bool = False) -> str:
         """
         获取PR数据并返回JSON字符串
         
@@ -341,8 +341,8 @@ class GitHubPRCommentsFetcher:
             # 获取PR数据
             pr_data = self.get_pr_comments(owner, repo, pr_number)
             
-            # 获取文件变更的完整内容
-            if 'files' in pr_data and 'nodes' in pr_data['files']:
+            # 获取文件变更的完整内容（仅在启用时）
+            if fetch_code_snippet and 'files' in pr_data and 'nodes' in pr_data['files']:
                 file_paths = [file_node['path'] for file_node in pr_data['files']['nodes']]
                 if file_paths:
                     print(f"正在获取 {len(file_paths)} 个文件的完整内容...")
@@ -404,6 +404,7 @@ def main():
 示例:
   python get_pr_comments.py JabRef jabref 13553
   python get_pr_comments.py JabRef jabref 13553 --output pr_data.json
+  python get_pr_comments.py JabRef jabref 13553 --fetch-code-snippet --output pr_data.json
         """
     )
     
@@ -423,6 +424,11 @@ def main():
         "--token",
         default="PAT.token",
         help="GitHub Personal Access Token文件路径 (默认: PAT.token)"
+    )
+    parser.add_argument(
+        "--fetch-code-snippet",
+        action="store_true",
+        help="获取文件的完整代码内容 (默认: 不获取)"
     )
     
     args = parser.parse_args()
@@ -450,7 +456,7 @@ def main():
     fetcher = GitHubPRCommentsFetcher(args.config, args.token)
     
     # 获取PR数据
-    result = fetcher.fetch_pr_data(args.owner, args.repo, args.pr_number)
+    result = fetcher.fetch_pr_data(args.owner, args.repo, args.pr_number, args.fetch_code_snippet)
 
     result = json.dumps(result, indent=4, ensure_ascii=False)
     

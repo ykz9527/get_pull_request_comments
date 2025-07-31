@@ -35,7 +35,7 @@ class GitHubAllPRDetailsFetcher:
         self.pr_ids_fetcher = GitHubPRIDsFetcher(config_path, token_path)
         self.pr_comments_fetcher = GitHubPRCommentsFetcher(config_path, token_path)
     
-    def get_all_pr_details(self, owner: str, repo: str, states: List[str] = None) -> List[Dict[str, Any]]:
+    def get_all_pr_details(self, owner: str, repo: str, states: List[str] = None, fetch_code_snippet: bool = False) -> List[Dict[str, Any]]:
         """
         获取所有符合条件的PR的详细信息
         
@@ -43,6 +43,7 @@ class GitHubAllPRDetailsFetcher:
             owner: 仓库所有者
             repo: 仓库名称
             states: PR状态过滤列表，可选值：OPEN, CLOSED, MERGED
+            fetch_code_snippet: 是否获取文件的完整代码内容
             
         Returns:
             List[Dict[str, Any]]: 包含所有PR详细信息的列表，每个字典都包含prID字段
@@ -65,7 +66,7 @@ class GitHubAllPRDetailsFetcher:
             
             try:
                 # 获取单个PR的详细信息
-                pr_details = self.pr_comments_fetcher.get_pr_comments(owner, repo, pr_id)
+                pr_details = self.pr_comments_fetcher.fetch_pr_data(owner, repo, pr_id, fetch_code_snippet)
                 
                 # 添加prID字段
                 pr_details['prID'] = pr_id
@@ -95,7 +96,7 @@ class GitHubAllPRDetailsFetcher:
         except Exception as e:
             print(f"保存文件时出错: {e}")
     
-    def get_all_pr_details_by_line(self, owner: str, repo: str, output_file: str, states: List[str] = None) -> int:
+    def get_all_pr_details_by_line(self, owner: str, repo: str, output_file: str, states: List[str] = None, fetch_code_snippet: bool = False) -> int:
         """
         获取所有符合条件的PR的详细信息，并逐行写入文件以防止内存溢出
         
@@ -104,6 +105,7 @@ class GitHubAllPRDetailsFetcher:
             repo: 仓库名称
             output_file: 输出文件路径
             states: PR状态过滤列表，可选值：OPEN, CLOSED, MERGED
+            fetch_code_snippet: 是否获取文件的完整代码内容
             
         Returns:
             int: 成功处理的PR数量
@@ -128,7 +130,7 @@ class GitHubAllPRDetailsFetcher:
                     
                     try:
                         # 获取单个PR的详细信息
-                        pr_details = self.pr_comments_fetcher.get_pr_comments(owner, repo, pr_id)
+                        pr_details = self.pr_comments_fetcher.fetch_pr_data(owner, repo, pr_id, fetch_code_snippet)
                         
                         # 添加prID字段
                         pr_details['prID'] = pr_id
@@ -164,6 +166,7 @@ def main():
   python get_all_pr_comments.py JabRef jabref --states OPEN CLOSED
   python get_all_pr_comments.py JabRef jabref --states MERGED --output jabref_merged_prs.json
   python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.json
+  python get_all_pr_comments.py JabRef jabref --states MERGED --fetch-code-snippet --output jabref_merged_prs.json
   python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.jsonl --store-by-line
         """
     )
@@ -196,6 +199,11 @@ def main():
         action='store_true',
         help='逐行写入JSON数据以防止内存溢出（仅在指定输出文件时可用）'
     )
+    parser.add_argument(
+        '--fetch-code-snippet',
+        action='store_true',
+        help='获取文件的完整代码内容 (默认: 不获取)'
+    )
     
     args = parser.parse_args()
     
@@ -218,7 +226,7 @@ def main():
         # 根据 store_by_line 选项选择不同的处理方式
         if args.store_by_line:
             # 使用逐行写入方式
-            success_count = fetcher.get_all_pr_details_by_line(args.owner, args.repo, args.output, args.states)
+            success_count = fetcher.get_all_pr_details_by_line(args.owner, args.repo, args.output, args.states, args.fetch_code_snippet)
             
             # 显示统计信息
             print(f"\n=== 统计信息 ===")
@@ -228,7 +236,7 @@ def main():
                 print("未获取到任何PR详细信息")
         else:
             # 使用传统方式（将所有数据保存在内存中）
-            pr_details = fetcher.get_all_pr_details(args.owner, args.repo, args.states)
+            pr_details = fetcher.get_all_pr_details(args.owner, args.repo, args.states, args.fetch_code_snippet)
             
             if pr_details:
                 # 保存到文件
