@@ -134,6 +134,8 @@ class GitHubPRCommentsFetcher:
               state
               createdAt
               updatedAt
+              baseRefOid
+              headRefOid
               author {{
                 login
               }}
@@ -207,6 +209,14 @@ class GitHubPRCommentsFetcher:
                   }}
                 }}
               }}
+              files(first: {self.limits['files']}) {{
+                nodes {{
+                  path
+                  additions
+                  deletions
+                  changeType
+                }}
+              }}
             }}
           }}
         }}
@@ -234,6 +244,82 @@ class GitHubPRCommentsFetcher:
         
         return data["data"]["repository"]["pullRequest"]
     
+    def get_file_contents(self, owner: str, repo: str, file_paths: list, base_sha: str = None, head_sha: str = None) -> Dict:
+        """
+        获取指定文件的修改前后完整内容
+        
+        Args:
+            owner: 仓库所有者
+            repo: 仓库名称
+            file_paths: 文件路径列表
+            base_sha: 基础分支的commit SHA（修改前）
+            head_sha: 头分支的commit SHA（修改后）
+            
+        Returns:
+            Dict: 包含文件内容的字典
+        """
+        # 构建动态查询，为每个文件创建别名
+        file_queries = []
+        for i, file_path in enumerate(file_paths):
+            # 修改后的文件内容
+            file_queries.append(f"""
+            file_{i}_after: object(expression: "{head_sha or 'HEAD'}:{file_path}") {{
+              ... on Blob {{
+                text
+                byteSize
+                isBinary
+              }}
+            }}""")
+            
+            # 修改前的文件内容
+            file_queries.append(f"""
+            file_{i}_before: object(expression: "{base_sha or 'HEAD~1'}:{file_path}") {{
+              ... on Blob {{
+                text
+                byteSize
+                isBinary
+              }}
+            }}""")
+        
+        query = f"""
+        query($owner: String!, $repo: String!) {{
+          repository(owner: $owner, name: $repo) {{
+            {''.join(file_queries)}
+          }}
+        }}
+        """
+        
+        variables = {
+            "owner": owner,
+            "repo": repo
+        }
+        
+        response = requests.post(
+            self.api_url,
+            headers=self.headers,
+            json={"query": query, "variables": variables}
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"API请求失败: {response.status_code} - {response.text}")
+        
+        data = response.json()
+        
+        if "errors" in data:
+            raise Exception(f"GraphQL错误: {data['errors']}")
+        
+        # 重新组织数据结构
+        result = {}
+        repo_data = data["data"]["repository"]
+        
+        for i, file_path in enumerate(file_paths):
+            result[file_path] = {
+                "before": repo_data.get(f"file_{i}_before"),
+                "after": repo_data.get(f"file_{i}_after")
+            }
+        
+        return result
+    
     def fetch_pr_data(self, owner: str, repo: str, pr_number: int) -> str:
         """
         获取PR数据并返回JSON字符串
@@ -254,6 +340,28 @@ class GitHubPRCommentsFetcher:
             
             # 获取PR数据
             pr_data = self.get_pr_comments(owner, repo, pr_number)
+            
+            # 获取文件变更的完整内容
+            if 'files' in pr_data and 'nodes' in pr_data['files']:
+                file_paths = [file_node['path'] for file_node in pr_data['files']['nodes']]
+                if file_paths:
+                    print(f"正在获取 {len(file_paths)} 个文件的完整内容...")
+                    try:
+                        # 使用PR的正确base和head commit SHA
+                        base_sha = pr_data.get('baseRefOid')
+                        head_sha = pr_data.get('headRefOid')
+                        print(f"Base SHA: {base_sha}, Head SHA: {head_sha}")
+                        
+                        file_contents = self.get_file_contents(owner, repo, file_paths, base_sha, head_sha)
+                        # 将文件内容添加到对应的文件节点中
+                        for file_node in pr_data['files']['nodes']:
+                            file_path = file_node['path']
+                            if file_path in file_contents:
+                                file_node['fullContent'] = file_contents[file_path]
+                        print("文件内容获取完成")
+                    except Exception as e:
+                        print(f"获取文件内容时出错: {e}")
+                        # 即使获取文件内容失败，也继续返回基本的PR数据
             
             # 获取查询后的API配额信息
             rate_limit_after = self.get_rate_limit_info()

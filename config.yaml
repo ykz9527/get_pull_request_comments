@@ -7,3 +7,4 @@ limits:
   closing_issues: 100
   reactions: 100
   pull_requests_per_page: 100
+  files: 100
