@@ -1,11 +1,19 @@
 # GitHub Pull Request Tools
 
+## 如何实现
+
+GitHub 提供了 GraphQL API，我们可以使用它来获取 PR 的详细信息。其实不止是 PR 的详细信息。
+想要获取 GitHub 页面的内容，把链接复制下来给各个大模型的网页工具（我用的 grok ）就能帮你写 GraphQL 脚本。
+如果这 3 个脚本没法满足你的要求，你可以自己复制链接给大模型就可以。
+
+以下是这 3 个脚本的介绍。
+
 这是一个GitHub Pull Request工具集，包含三个主要功能：
 1. **获取PR详细内容** - 获取指定PR的讨论内容、评论、代码审查等详细信息
 2. **获取PR ID列表** - 获取仓库中所有或特定状态的Pull Request ID列表
 3. **批量获取PR详细信息** - 整合前两个功能，批量获取所有符合条件的PR的详细信息
 
-所有工具都使用GitHub的GraphQL API，支持灵活的配置和多种输出选项。
+所有工具都使用GitHub的GraphQL API。
 
 ## 功能特性
 
@@ -16,23 +24,18 @@
 - 获取提交记录
 - 获取关联的问题
 - **可选获取文件完整代码内容**：支持获取PR中所有变更文件的修改前后完整内容
-- 支持命令行参数
 - 支持输出到控制台或保存到文件
-- JSON格式输出
 
 ### PR列表获取 (get_all_pr_brief.py)
 - 获取仓库的所有Pull Request ID或详细信息
 - 支持按状态过滤（OPEN、CLOSED、MERGED）
-- 支持分页查询，获取完整历史记录
 - 支持控制台输出或保存到文件
-- 支持自定义输出文件名
 - 可选择获取简洁的ID列表或详细的PR信息
 - 详细信息包括：标题、状态、时间、作者、代码变更统计等
 
 ### 批量PR详细信息获取 (get_all_pr_comments.py)
 - 整合前两个工具的功能，一次性获取所有符合条件的PR详细信息
 - 先获取PR ID列表，再循环获取每个PR的详细信息
-- 在每个PR详细信息中自动添加prID字段
 - 支持按状态过滤（OPEN、CLOSED、MERGED）
 - **可选批量获取代码内容**：支持为所有PR获取文件的完整代码内容
 - 显示处理进度和统计信息
@@ -42,7 +45,7 @@
 
 ## 安装依赖
 
-本项目默认使用 uv 作为 Python 包管理器和虚拟环境工具。
+本项目使用 uv 作为 Python 包管理器和虚拟环境工具。
 
 ```bash
 uv venv --python 3.12 .venv
@@ -98,21 +101,6 @@ uv pip install -r requirements.txt
    - 对于简单的PR或网络较慢的环境，可以减少这些值以提高响应速度
    - 如果遇到GitHub API速率限制，建议降低这些值
    
-   **设置无限制：**
-   
-   如果需要获取所有数据而不受限制，可以将相应的值设置为较大的数字（如9999）：
-   ```yaml
-   limits:
-     comments: 9999
-     reviews: 9999
-     review_comments: 9999
-      commits: 9999
-      closing_issues: 9999
-      reactions: 9999
-      pull_requests_per_page: 100
-      files: 9999
-   ```
-   
    **⚠️ 注意事项：**
    - 设置过大的限制值可能导致请求超时或内存不足
    - 会消耗更多的GitHub API配额，可能触发速率限制
@@ -166,9 +154,6 @@ python get_pr_comments.py JabRef jabref 13553 --output pr_data.json --config my_
 **功能特点：**
 - 获取PR中每个变更文件的修改前完整内容（base版本）
 - 获取PR中每个变更文件的修改后完整内容（head版本）
-- 支持文本文件的完整内容获取
-- 自动识别二进制文件并标记
-- 提供文件大小信息
 
 **输出格式：**
 在每个文件节点中会添加 `fullContent` 对象，包含：
@@ -243,6 +228,28 @@ python get_all_pr_brief.py JabRef jabref --detailed --states OPEN --output detai
 # 获取已合并的PR详细信息并保存到自定义文件
 python get_all_pr_brief.py JabRef jabref --detailed --states MERGED --output detailed_merged_prs.json
 ```
+
+#### 详细信息字段说明
+
+当使用 `--detailed` 参数时，每个PR包含以下信息：
+- `number`: PR编号
+- `title`: PR标题
+- `state`: PR状态 (OPEN/CLOSED/MERGED)
+- `createdAt`: 创建时间
+- `updatedAt`: 更新时间
+- `closedAt`: 关闭时间
+- `mergedAt`: 合并时间
+- `author`: 作者用户名
+- `mergeable`: 是否可合并
+- `merged`: 是否已合并
+- `isDraft`: 是否为草稿
+- `additions`: 新增行数
+- `deletions`: 删除行数
+- `changedFiles`: 修改文件数
+- `url`: PR链接
+- `headRefName`: 源分支名
+- `baseRefName`: 目标分支名
+
 
 ### 3. 批量获取PR详细信息 (get_all_pr_comments.py)
 
@@ -322,27 +329,6 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet -
    - 输出文件建议使用 `.jsonl` 扩展名以表明是JSON Lines格式
    - 该模式下无法生成标准的JSON数组格式，需要逐行解析
 
-#### 详细信息字段说明
-
-当使用 `--detailed` 参数时，每个PR包含以下信息：
-- `number`: PR编号
-- `title`: PR标题
-- `state`: PR状态 (OPEN/CLOSED/MERGED)
-- `created_at`: 创建时间
-- `updated_at`: 更新时间
-- `closed_at`: 关闭时间
-- `merged_at`: 合并时间
-- `author`: 作者用户名
-- `mergeable`: 是否可合并
-- `merged`: 是否已合并
-- `isDraft`: 是否为草稿
-- `additions`: 新增行数
-- `deletions`: 删除行数
-- `changedFiles`: 修改文件数
-- `url`: PR链接
-- `headRefName`: 源分支名
-- `baseRefName`: 目标分支名
-
 ## 输出格式
 
 所有输出均为JSON格式，包含PR的完整结构化数据和API使用情况：
@@ -382,11 +368,11 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet -
 
 ### API使用情况说明
 
-- `query_cost`: 本次查询消耗的API点数
-- `rate_limit.limit`: 每小时的API配额总限制
-- `rate_limit.remaining`: 当前剩余的API配额
-- `rate_limit.used`: 已使用的API配额
-- `rate_limit.resetAt`: API配额重置时间（UTC时间）
+- `queryCost`: 本次查询消耗的API点数
+- `rateLimit.limit`: 每小时的API配额总限制
+- `rateLimit.remaining`: 当前剩余的API配额
+- `rateLimit.used`: 已使用的API配额
+- `rateLimit.resetAt`: API配额重置时间（UTC时间）
 
 脚本会在控制台显示API使用情况，帮助用户监控配额消耗。
 
@@ -416,7 +402,3 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet -
 3. **Token权限不足**：确保token有访问目标仓库的权限
 4. **API限制**：如果遇到速率限制，请等待一段时间后重试
 5. **网络问题**：检查网络连接和GitHub API状态
-
-## 许可证
-
-本项目采用MIT许可证。
