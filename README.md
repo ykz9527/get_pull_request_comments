@@ -73,6 +73,7 @@ uv pip install -r requirements.txt
      closing_issues: 100
      reactions: 100
      pull_requests_per_page: 100
+     files: 100
    ```
 
    **limits配置说明：**
@@ -90,6 +91,7 @@ uv pip install -r requirements.txt
    - `closing_issues`: 获取PR关联问题的最大数量（默认100个）
    - `reactions`: 每条评论的反应表情最大数量（默认100个）
    - `pull_requests_per_page`: 获取PR列表时每页的数量（默认100个）
+   - `files`: 获取PR变更文件的最大数量（默认100个）
    
    **调整建议：**
    - 对于大型项目或活跃的PR，可以适当增加这些限制值
@@ -108,6 +110,7 @@ uv pip install -r requirements.txt
       closing_issues: 9999
       reactions: 9999
       pull_requests_per_page: 100
+      files: 9999
    ```
    
    **⚠️ 注意事项：**
