@@ -1,0 +1,9 @@
+# GitHub API 配置
+limits:
+  comments: 100
+  reviews: 100
+  review_comments: 100
+  commits: 100
+  closing_issues: 100
+  reactions: 100
+  pull_requests_per_page: 100

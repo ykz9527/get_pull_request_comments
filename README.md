@@ -40,7 +40,9 @@
 ## 安装依赖
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.12 .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
 ## 配置
@@ -51,20 +53,21 @@ pip install -r requirements.txt
    - 选择适当的权限（至少需要 `public_repo` 权限）
    - 复制生成的token
 
-2. 配置config.json文件：
-   ```json
-   {
-     "github_token": "your_github_token_here",
-     "limits": {
-       "comments": 100,
-       "reviews": 100,
-       "review_comments": 100,
-       "commits": 100,
-       "closing_issues": 100,
-       "reactions": 100,
-       "pull_requests_per_page": 100
-     }
-   }
+2. 创建PAT.token文件：
+   ```bash
+   echo "your_github_token_here" > PAT.token
+   ```
+
+3. 配置config.yaml文件：
+   ```yaml
+   limits:
+     comments: 100
+     reviews: 100
+     review_comments: 100
+     commits: 100
+     closing_issues: 100
+     reactions: 100
+     pull_requests_per_page: 100
    ```
 
    **limits配置说明：**
@@ -91,19 +94,15 @@ pip install -r requirements.txt
    **设置无限制：**
    
    如果需要获取所有数据而不受限制，可以将相应的值设置为较大的数字（如9999）：
-   ```json
-   {
-     "github_token": "your_github_token_here",
-     "limits": {
-       "comments": 9999,
-       "reviews": 9999,
-       "review_comments": 9999,
-       "commits": 9999,
-       "closing_issues": 9999,
-       "reactions": 9999,
-       "pull_requests_per_page": 100
-     }
-   }
+   ```yaml
+   limits:
+     comments: 9999
+     reviews: 9999
+     review_comments: 9999
+      commits: 9999
+      closing_issues: 9999
+      reactions: 9999
+      pull_requests_per_page: 100
    ```
    
    **⚠️ 注意事项：**
@@ -133,7 +132,8 @@ python get_pr_comments.py <owner> <repo> <pr_number> [--output console|file] [--
 - `repo`: 仓库名称
 - `pr_number`: Pull Request编号
 - `--output`: 输出文件名，不指定则输出到控制台
-- `--config`: 配置文件路径，默认为 `config.json`
+- `--config`: 配置文件路径，默认为 `config.yaml`
+- `--token`: GitHub Personal Access Token文件路径，默认为 `PAT.token`
 
 #### 使用示例
 ```bash
@@ -143,8 +143,8 @@ python get_pr_comments.py JabRef jabref 13553
 # 保存到文件
 python get_pr_comments.py JabRef jabref 13553 --output pr_data.json
 
-# 使用自定义配置文件
-python get_pr_comments.py JabRef jabref 13553 --output pr_data.json --config my_config.json
+# 使用自定义配置文件和token文件
+python get_pr_comments.py JabRef jabref 13553 --output pr_data.json --config my_config.yaml --token my_token.token
 ```
 
 ### 2. 获取PR ID列表或详细信息 (get_all_pr_brief.py)
@@ -200,7 +200,8 @@ python get_all_pr_comments.py <owner> <repo> [--states STATE1 STATE2 ...] [--out
 - `repo`: 仓库名称（必需）
 - `--states`: PR状态过滤，可选值：OPEN, CLOSED, MERGED（可选多个）
 - `--output`: 输出文件名（默认：all_pr_details.json）
-- `--config`: 配置文件路径（默认：config.json）
+- `--config`: 配置文件路径（默认：config.yaml）
+- `--token`: GitHub Personal Access Token文件路径（默认：PAT.token）
 - `--store-by-line`: 逐行写入JSON数据以防止内存溢出（仅在明确指定 --output 时可用）
 
 #### 使用示例
@@ -215,8 +216,8 @@ python get_all_pr_comments.py JabRef jabref --states MERGED CLOSED
 # 只获取开放状态的PR并指定输出文件
 python get_all_pr_comments.py JabRef jabref --states OPEN --output jabref_open_prs.json
 
-# 使用自定义配置文件
-python get_all_pr_comments.py JabRef jabref --config my_config.json --output jabref_prs.json
+# 使用自定义配置文件和token文件
+python get_all_pr_comments.py JabRef jabref --config my_config.yaml --token my_token.token --output jabref_prs.json
 
 # 使用逐行写入模式防止内存溢出（适用于大量PR的情况）
 python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.jsonl --store-by-line
@@ -334,7 +335,9 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --output jabref_open_p
 ```
 ├── get_pr_comments.py   # PR详细内容获取脚本
 ├── get_all_pr_brief.py  # PR ID列表获取脚本
-├── config.json          # 配置文件
+├── get_all_pr_comments.py # 批量获取PR详细信息脚本
+├── config.yaml          # 配置文件
+├── PAT.token           # GitHub Personal Access Token文件
 ├── requirements.txt     # 依赖包
 └── README.md           # 说明文档
 ```
@@ -344,14 +347,15 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --output jabref_open_p
 - GitHub GraphQL API有速率限制
 - 每小时最多5000个请求点数
 - 复杂查询会消耗更多点数
-- 可在config.json中调整数据获取的数量限制
+- 可在config.yaml中调整数据获取的数量限制
 
 ## 故障排除
 
-1. **配置文件不存在**：确保config.json文件存在且格式正确
-2. **Token权限不足**：确保token有访问目标仓库的权限
-3. **API限制**：如果遇到速率限制，请等待一段时间后重试
-4. **网络问题**：检查网络连接和GitHub API状态
+1. **配置文件不存在**：确保config.yaml文件存在且格式正确
+2. **Token文件不存在**：确保PAT.token文件存在且包含有效的GitHub Personal Access Token
+3. **Token权限不足**：确保token有访问目标仓库的权限
+4. **API限制**：如果遇到速率限制，请等待一段时间后重试
+5. **网络问题**：检查网络连接和GitHub API状态
 
 ## 许可证
 

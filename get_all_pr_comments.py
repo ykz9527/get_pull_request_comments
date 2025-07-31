@@ -24,15 +24,16 @@ from get_pr_comments import GitHubPRCommentsFetcher
 
 
 class GitHubAllPRDetailsFetcher:
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.yaml", token_path: str = "PAT.token"):
         """
         初始化PR详细信息获取器
         
         Args:
             config_path: 配置文件路径
+            token_path: GitHub PAT token文件路径
         """
-        self.pr_ids_fetcher = GitHubPRIDsFetcher(config_path)
-        self.pr_comments_fetcher = GitHubPRCommentsFetcher(config_path)
+        self.pr_ids_fetcher = GitHubPRIDsFetcher(config_path, token_path)
+        self.pr_comments_fetcher = GitHubPRCommentsFetcher(config_path, token_path)
     
     def get_all_pr_details(self, owner: str, repo: str, states: List[str] = None) -> List[Dict[str, Any]]:
         """
@@ -182,8 +183,13 @@ def main():
     )
     parser.add_argument(
         '--config',
-        default='config.json',
-        help='配置文件路径（默认：config.json）'
+        default='config.yaml',
+        help='配置文件路径（默认：config.yaml）'
+    )
+    parser.add_argument(
+        '--token',
+        default='PAT.token',
+        help='GitHub Personal Access Token文件路径（默认：PAT.token）'
     )
     parser.add_argument(
         '--store-by-line',
@@ -207,7 +213,7 @@ def main():
     
     try:
         # 创建获取器实例
-        fetcher = GitHubAllPRDetailsFetcher(args.config)
+        fetcher = GitHubAllPRDetailsFetcher(args.config, args.token)
         
         # 根据 store_by_line 选项选择不同的处理方式
         if args.store_by_line:

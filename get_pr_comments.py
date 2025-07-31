@@ -17,18 +17,20 @@ import json
 import argparse
 import sys
 import os
+import yaml
 from typing import Dict
 
 class GitHubPRCommentsFetcher:
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.yaml", token_path: str = "PAT.token"):
         """
         初始化GitHub API客户端
         
         Args:
             config_path: 配置文件路径
+            token_path: GitHub PAT token文件路径
         """
         self.config = self.load_config(config_path)
-        self.token = self.config["github_token"]
+        self.token = self.load_token(token_path)
         self.limits = self.config["limits"]
         self.api_url = "https://api.github.com/graphql"
         self.headers = {
@@ -48,12 +50,34 @@ class GitHubPRCommentsFetcher:
         """
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                return yaml.safe_load(f)
         except FileNotFoundError:
             print(f"错误: 配置文件 {config_path} 不存在")
             sys.exit(1)
-        except json.JSONDecodeError:
+        except yaml.YAMLError:
             print(f"错误: 配置文件 {config_path} 格式错误")
+            sys.exit(1)
+    
+    def load_token(self, token_path: str) -> str:
+        """
+        从文件加载GitHub Personal Access Token
+        
+        Args:
+            token_path: token文件路径
+            
+        Returns:
+            str: GitHub PAT token
+        """
+        try:
+            with open(token_path, 'r', encoding='utf-8') as f:
+                token = f.read().strip()
+                if not token:
+                    print(f"错误: token文件 {token_path} 为空")
+                    sys.exit(1)
+                return token
+        except FileNotFoundError:
+            print(f"错误: token文件 {token_path} 不存在")
+            print(f"请创建 {token_path} 文件并将GitHub Personal Access Token写入其中")
             sys.exit(1)
     
     def get_rate_limit_info(self) -> Dict:
@@ -284,8 +308,13 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default="config.json",
-        help="配置文件路径 (默认: config.json)"
+        default="config.yaml",
+        help="配置文件路径 (默认: config.yaml)"
+    )
+    parser.add_argument(
+        "--token",
+        default="PAT.token",
+        help="GitHub Personal Access Token文件路径 (默认: PAT.token)"
     )
     
     args = parser.parse_args()
@@ -294,21 +323,23 @@ def main():
     if not os.path.exists(args.config):
         print(f"错误: 配置文件 {args.config} 不存在")
         print("请确保配置文件包含以下格式:")
-        print(json.dumps({
-            "github_token": "your_github_token_here",
-            "limits": {
-                "comments": 100,
-                "reviews": 100,
-                "review_comments": 50,
-                "commits": 100,
-                "closing_issues": 25,
-                "reactions": 10
-            }
-        }, indent=2))
+        print("limits:")
+        print("  comments: 100")
+        print("  reviews: 100")
+        print("  review_comments: 50")
+        print("  commits: 100")
+        print("  closing_issues: 25")
+        print("  reactions: 10")
+        sys.exit(1)
+    
+    # 检查token文件是否存在
+    if not os.path.exists(args.token):
+        print(f"错误: token文件 {args.token} 不存在")
+        print(f"请创建 {args.token} 文件并将GitHub Personal Access Token写入其中")
         sys.exit(1)
     
     # 创建fetcher
-    fetcher = GitHubPRCommentsFetcher(args.config)
+    fetcher = GitHubPRCommentsFetcher(args.config, args.token)
     
     # 获取PR数据
     result = fetcher.fetch_pr_data(args.owner, args.repo, args.pr_number)

@@ -40,18 +40,20 @@ import requests
 import json
 import argparse
 import sys
+import yaml
 from typing import List, Dict, Any
 
 class GitHubPRIDsFetcher:
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.yaml", token_path: str = "PAT.token"):
         """
         初始化GitHub API客户端
         
         Args:
             config_path: 配置文件路径
+            token_path: GitHub PAT token文件路径
         """
         self.config = self.load_config(config_path)
-        self.token = self.config["github_token"]
+        self.token = self.load_token(token_path)
         self.limits = self.config["limits"]
         self.api_url = "https://api.github.com/graphql"
         self.headers = {
@@ -71,12 +73,34 @@ class GitHubPRIDsFetcher:
         """
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                return yaml.safe_load(f)
         except FileNotFoundError:
             print(f"错误: 配置文件 {config_path} 不存在")
             sys.exit(1)
-        except json.JSONDecodeError:
+        except yaml.YAMLError:
             print(f"错误: 配置文件 {config_path} 格式错误")
+            sys.exit(1)
+    
+    def load_token(self, token_path: str) -> str:
+        """
+        从文件加载GitHub Personal Access Token
+        
+        Args:
+            token_path: token文件路径
+            
+        Returns:
+            str: GitHub PAT token
+        """
+        try:
+            with open(token_path, 'r', encoding='utf-8') as f:
+                token = f.read().strip()
+                if not token:
+                    print(f"错误: token文件 {token_path} 为空")
+                    sys.exit(1)
+                return token
+        except FileNotFoundError:
+            print(f"错误: token文件 {token_path} 不存在")
+            print(f"请创建 {token_path} 文件并将GitHub Personal Access Token写入其中")
             sys.exit(1)
     
     def get_all_pr_ids(self, owner: str, repo: str, states: List[str] = None) -> List[int]:
@@ -229,11 +253,21 @@ def main():
     )
     parser.add_argument("--detailed", action="store_true", help="获取详细信息而不仅仅是ID")
     parser.add_argument("--ids-only", action="store_true", help="仅获取ID列表（默认行为）")
+    parser.add_argument(
+        "--config",
+        default="config.yaml",
+        help="配置文件路径 (默认: config.yaml)"
+    )
+    parser.add_argument(
+        "--token",
+        default="PAT.token",
+        help="GitHub Personal Access Token文件路径 (默认: PAT.token)"
+    )
     
     args = parser.parse_args()
     
     try:
-        fetcher = GitHubPRIDsFetcher()
+        fetcher = GitHubPRIDsFetcher(args.config, args.token)
         
         # 根据参数决定获取详细信息还是仅ID
         if args.detailed:

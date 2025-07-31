@@ -6,7 +6,7 @@ config.py
 *.key
 *.secret
 
-# 输出文件和配置
+# 输出文件
 *.json
 *.jsonl
 pr_comments.*
@@ -37,6 +37,7 @@ share/python-wheels/
 MANIFEST
 
 # 虚拟环境
+.venv/
 venv/
 env/
 ENV/
