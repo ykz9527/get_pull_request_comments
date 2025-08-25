@@ -2,22 +2,34 @@
 
 ## 如何实现
 
-GitHub 提供了 GraphQL API，我们可以使用它来获取 PR 的详细信息。其实不止是 PR 的详细信息。
+GitHub 提供了多种API接口来获取 PR 的详细信息：
+1. **GraphQL API**：功能强大但复杂，需要手动构建查询
+2. **PyGithub 库**：Python封装的GitHub REST API，更简洁易用
+
+本项目同时提供两种实现：
+- `get_pr_comments.py`：使用 GraphQL API
+- `get_pr_comments_py_github.py`：使用 PyGithub 库（推荐）
+
 想要获取 GitHub 页面的内容，把链接复制下来给各个大模型的网页工具（我用的 grok ）就能帮你写 GraphQL 脚本。
-如果这 3 个脚本没法满足你的要求，你可以自己复制链接给大模型就可以。
+如果这些脚本没法满足你的要求，你可以自己复制链接给大模型就可以。
 
-以下是这 3 个脚本的介绍。
+以下是这 4 个脚本的介绍。
 
-这是一个GitHub Pull Request工具集，包含三个主要功能：
+这是一个GitHub Pull Request工具集，包含四个主要功能：
 1. **获取PR详细内容** - 获取指定PR的讨论内容、评论、代码审查等详细信息
 2. **获取PR ID列表** - 获取仓库中所有或特定状态的Pull Request ID列表
 3. **批量获取PR详细信息** - 整合前两个功能，批量获取所有符合条件的PR的详细信息
+4. **GFM内容处理** - 将GitHub Flavored Markdown内容转换为纯文本格式
 
-所有工具都使用GitHub的GraphQL API。
+提供两种API实现方式：
+- **GraphQL版本**：使用GitHub GraphQL API（复杂但功能全面）
+- **PyGithub版本**：使用PyGithub库（简洁易维护，推荐使用）
 
 ## 功能特性
 
-### PR详细内容获取 (get_pr_comments.py)
+### PR详细内容获取
+#### GraphQL版本 (get_pr_comments.py)
+- 使用GitHub GraphQL API，功能全面
 - 获取PR的基本信息（标题、描述、状态等）
 - 获取所有普通评论和回复
 - 获取代码审查评论（包括行内评论）
@@ -25,6 +37,13 @@ GitHub 提供了 GraphQL API，我们可以使用它来获取 PR 的详细信息
 - 获取关联的问题
 - **可选获取文件完整代码内容**：支持获取PR中所有变更文件的修改前后完整内容
 - 支持输出到控制台或保存到文件
+
+#### PyGithub版本 (get_pr_comments_py_github.py) - **推荐**
+- 使用PyGithub库，代码更简洁易维护
+- 功能与GraphQL版本相同，输出格式完全兼容
+- 更好的错误处理和异常管理
+- 相同的配置文件和命令行参数
+- 支持所有GraphQL版本的功能特性
 
 ### PR列表获取 (get_all_pr_brief.py)
 - 获取仓库的所有Pull Request ID或详细信息
@@ -42,6 +61,26 @@ GitHub 提供了 GraphQL API，我们可以使用它来获取 PR 的详细信息
 - 错误处理：单个PR失败不影响整体流程
 - 支持逐行写入模式防止内存溢出
 - 自动保存到JSON文件
+
+### GFM内容处理 (process_gfm_content.py)
+- 读取JSON文件中的PR数据（支持JSON Lines格式）
+- 将GitHub Flavored Markdown (GFM) 格式的body字段转换为纯文本
+- 清理所有格式字符、超链接、HTML标签等
+- 保留代码块内容，但移除格式标记
+- 处理图片标签，保留alt文本或显示占位符
+- 保持合理的段落结构和列表格式
+- 支持批量处理多个PR记录
+- 提供详细的处理统计信息
+- 错误处理：单个记录处理失败不影响整体流程
+
+**GFM处理特性：**
+- **链接处理**：`[text](url)` → 只保留 `text`
+- **图片处理**：`![alt](url)` → 转换为 `[图片: alt]`
+- **代码块**：`` `code` `` → 保留 `code` 内容
+- **HTML标签**：`<tag>content</tag>` → 只保留 `content`
+- **列表**：`<li>item</li>` → 转换为 `• item`
+- **表格**：转换为简单的文本格式
+- **格式清理**：移除多余的空白字符和换行
 
 ## 安装依赖
 
@@ -116,14 +155,16 @@ uv pip install -r requirements.txt
 
 ## 使用方法
 
-### 1. 获取PR详细内容 (get_pr_comments.py)
+### 1. 获取PR详细内容
 
-#### 命令行格式
+#### 1.1 GraphQL版本 (get_pr_comments.py)
+
+##### 命令行格式
 ```bash
 python get_pr_comments.py <owner> <repo> <pr_number> [--output console|file] [--filename output.json]
 ```
 
-#### 参数说明
+##### 参数说明
 - `owner`: 仓库所有者
 - `repo`: 仓库名称
 - `pr_number`: Pull Request编号
@@ -132,7 +173,7 @@ python get_pr_comments.py <owner> <repo> <pr_number> [--output console|file] [--
 - `--token`: GitHub Personal Access Token文件路径，默认为 `PAT.token`
 - `--fetch-code-snippet`: 获取文件的完整代码内容（修改前后对比），默认不获取
 
-#### 使用示例
+##### 使用示例
 ```bash
 # 输出到控制台
 python get_pr_comments.py JabRef jabref 13553
@@ -146,6 +187,38 @@ python get_pr_comments.py JabRef jabref 13553 --fetch-code-snippet --output pr_d
 # 使用自定义配置文件和token文件
 python get_pr_comments.py JabRef jabref 13553 --output pr_data.json --config my_config.yaml --token my_token.token
 ```
+
+#### 1.2 PyGithub版本 (get_pr_comments_py_github.py) - **推荐**
+
+##### 命令行格式
+```bash
+python get_pr_comments_py_github.py <owner> <repo> <pr_number> [--output console|file] [--filename output.json]
+```
+
+##### 参数说明
+参数与GraphQL版本完全相同，输出格式也完全兼容。
+
+##### 使用示例
+```bash
+# 输出到控制台
+python get_pr_comments_py_github.py JabRef jabref 13553
+
+# 保存到文件
+python get_pr_comments_py_github.py JabRef jabref 13553 --output pr_data.json
+
+# 获取文件的完整代码内容（修改前后对比）
+python get_pr_comments_py_github.py JabRef jabref 13553 --fetch-code-snippet --output pr_data.json
+
+# 使用自定义配置文件和token文件
+python get_pr_comments_py_github.py JabRef jabref 13553 --output pr_data.json --config my_config.yaml --token my_token.token
+```
+
+##### PyGithub版本的优势
+- 代码更简洁，维护性更好
+- 更好的错误处理和异常管理
+- 不需要手动构建复杂的GraphQL查询
+- 使用标准的GitHub REST API，更稳定
+- 输出格式与GraphQL版本100%兼容
 
 #### --fetch-code-snippet 参数说明
 
@@ -293,43 +366,115 @@ python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.jsonl --stor
 python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet --output jabref_open_prs.jsonl --store-by-line
 ```
 
+### 4. GFM内容处理 (process_gfm_content.py)
+
+#### 命令行格式
+```bash
+python process_gfm_content.py <input_file> <output_file> [--verbose]
+```
+
+#### 参数说明
+- `input_file`: 输入JSON文件路径（必需）
+- `output_file`: 输出JSON文件路径（必需）
+- `--verbose, -v`: 显示详细处理信息（可选）
+
+#### 使用示例
+
+```bash
+# 处理JSON Lines格式的文件
+python process_gfm_content.py "output/jabref_merged_prs copy.json" "output/processed_prs.json"
+
+# 处理标准JSON格式的文件
+python process_gfm_content.py "input.json" "output.json"
+
+# 显示详细处理信息
+python process_gfm_content.py "input.json" "output.json" --verbose
+```
+
+#### 输入格式支持
+
+脚本支持两种输入格式：
+
+**JSON Lines格式（推荐）：**
+每行一个JSON对象，这是批量获取脚本的默认输出格式：
+```
+{"prData": {...}, "apiUsage": {...}}
+{"prData": {...}, "apiUsage": {...}}
+{"prData": {...}, "apiUsage": {...}}
+```
+
+**标准JSON格式：**
+包含JSON对象数组的文件：
+```json
+[
+  {"prData": {...}, "apiUsage": {...}},
+  {"prData": {...}, "apiUsage": {...}},
+  {"prData": {...}, "apiUsage": {...}}
+]
+```
+
 #### 输出格式
 
-脚本支持两种输出格式：
+输出文件采用JSON Lines格式，每行一个处理后的JSON对象，保持原有的数据结构，但body字段被转换为纯文本：
 
-**标准模式（默认）：**
-生成一个JSON文件，包含一个数组，每个元素都是一个PR的详细信息字典。每个字典都包含：
+```json
+{
+  "prData": {
+    "title": "PR标题",
+    "body": "转换后的纯文本内容，没有格式字符和超链接",
+    "url": "PR链接",
+    "state": "OPEN",
+    "comments": {
+      "nodes": [
+        {
+          "body": "转换后的评论纯文本内容",
+          "author": {"login": "用户名"}
+        }
+      ]
+    }
+  },
+  "apiUsage": {...}
+}
+```
 
-- `prID`: PR的ID号（新增字段）
-- `pullRequest`: PR的详细信息（来自GitHubPRCommentsFetcher）
-  - `title`: PR标题
-  - `body`: PR描述
-  - `state`: PR状态
-  - `comments`: 评论列表
-  - `reviews`: 审查列表
-  - 等等...
+#### 处理特性
 
-**逐行写入模式（--store-by-line）：**
-生成一个JSONL文件（JSON Lines格式），每行包含一个完整的PR详细信息JSON对象。这种格式：
-- 防止大量PR数据导致的内存溢出
-- 支持流式处理，可以边获取边写入
-- 每个PR处理完成后立即写入磁盘
-- 适合处理大型仓库或历史悠久的项目
+**GFM元素转换规则：**
+- **Markdown链接**：`[text](url)` → `text`
+- **Markdown图片**：`![alt](url)` → `[图片: alt]`
+- **行内代码**：`` `code` `` → `code`
+- **代码块**：```code``` → `[代码块] code [/代码块]`
+- **粗体文本**：`**text**` → `text`
+- **斜体文本**：`*text*` → `text`
+- **HTML标签**：`<tag>content</tag>` → `content`
+- **列表项**：`<li>item</li>` → `• item`
+- **表格**：转换为简单的文本格式
+- **标题**：`# title` → `title`
+
+**文本清理：**
+- 移除多余的空白字符和换行
+- 保持合理的段落结构
+- 清理行首行尾空白
+- 合并连续的空白行
 
 #### 注意事项
 
-1. 确保 `config.json` 文件存在且包含有效的GitHub token
-2. 对于大型仓库，获取所有PR详细信息可能需要较长时间
-3. 脚本会显示进度信息，包括当前处理的PR编号
-4. 如果某个PR获取失败，脚本会继续处理其他PR
-5. 最终会显示统计信息，包括按状态分布的PR数量
-6. **关于 --store-by-line 选项：**
-   - 只能在明确指定 `--output` 参数时使用
-   - 推荐用于处理大量PR（如超过1000个）的场景
-   - 输出文件建议使用 `.jsonl` 扩展名以表明是JSON Lines格式
-   - 该模式下无法生成标准的JSON数组格式，需要逐行解析
+1. 脚本会处理以下字段中的GFM内容：
+   - `prData.body`：PR描述内容
+   - `comments.nodes[].body`：评论内容
+   - `reviewThreads.nodes[].comments.nodes[].body`：审查评论内容
 
-## 输出格式
+2. 如果GFM转换失败，会使用简单的文本清理作为备用方案
+
+3. 脚本提供详细的处理统计信息，包括：
+   - 总记录数
+   - 成功处理数
+   - 跳过记录数
+   - 错误数量
+
+4. 支持错误处理：单个记录处理失败不会影响整体流程
+
+#### 输出格式
 
 所有输出均为JSON格式，包含PR的完整结构化数据和API使用情况：
 
@@ -379,13 +524,14 @@ python get_all_pr_comments.py JabRef jabref --states OPEN --fetch-code-snippet -
 ## 项目结构
 
 ```
-├── get_pr_comments.py   # PR详细内容获取脚本
-├── get_all_pr_brief.py  # PR ID列表获取脚本
-├── get_all_pr_comments.py # 批量获取PR详细信息脚本
-├── config.yaml          # 配置文件
-├── PAT.token           # GitHub Personal Access Token文件
-├── requirements.txt     # 依赖包
-└── README.md           # 说明文档
+├── get_pr_comments.py      # PR详细内容获取脚本
+├── get_all_pr_brief.py     # PR ID列表获取脚本
+├── get_all_pr_comments.py  # 批量获取PR详细信息脚本
+├── process_gfm_content.py  # GFM内容处理脚本
+├── requirements.txt         # Python依赖包
+├── config.yaml             # 配置文件
+├── PAT.token              # GitHub Personal Access Token
+└── README.md              # 项目说明文档
 ```
 
 ## API限制

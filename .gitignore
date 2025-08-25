@@ -1,5 +1,6 @@
 # 敏感配置文件
 config.py
+.env
 
 # GitHub tokens和密钥
 *.token

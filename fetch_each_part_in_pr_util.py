@@ -164,7 +164,7 @@ def fetch_reviews(owner, repo, pr_number):
 
     return all_reviews
 
-def get_pr_comments(owner, repo, pr_number):
+def fetch_pr_comments(owner, repo, pr_number):
     # Read PAT from PAT.token
     with open('PAT.token', 'r') as f:
         token = f.read().strip()
@@ -233,7 +233,7 @@ def get_pr_comments(owner, repo, pr_number):
 
     return all_comments
 
-def get_pr_commits(owner, repo, pr_number):
+def fetch_pr_commits(owner, repo, pr_number):
     with open('PAT.token', 'r') as f:
         pat = f.read().strip()
     
@@ -301,7 +301,7 @@ def get_pr_commits(owner, repo, pr_number):
     
     return all_commits
 
-def get_file_content(owner: str, repo: str, commit_sha: str, file_path: str) -> str:
+def fetch_file_content(owner: str, repo: str, commit_sha: str, file_path: str) -> str:
     """
     获取 GitHub 仓库中指定 commit 和路径的文件内容。
     
@@ -391,7 +391,7 @@ def get_file_content(owner: str, repo: str, commit_sha: str, file_path: str) -> 
         }
         raise Exception(json.dumps(error_info))
 
-def fetch_all_review_threads(owner, repo, pr_number):
+def fetch_review_threads(owner, repo, pr_number):
     # Read configuration from config.yaml
     with open('config.yaml', 'r') as file:
         config = yaml.safe_load(file)
@@ -496,27 +496,27 @@ def fetch_all_review_threads(owner, repo, pr_number):
 if __name__ == "__main__":
     output_dict = {}
 
-    # content = get_file_content("RylynnWang", "TestGraphQL", "90a5095763c5c5c7aee2f51bf03c1d77a04096d5", "train_bpe_tokenizer.py")
+    # content = fetch_file_content("RylynnWang", "TestGraphQL", "90a5095763c5c5c7aee2f51bf03c1d77a04096d5", "train_bpe_tokenizer.py")
     # output_dict.update({"fileContent":content})
 
-    # owner = 'RylynnWang'
-    # repo = 'TestGraphQL'
-    # pr_number = 1
+    owner = 'RylynnWang'
+    repo = 'TestGraphQL'
+    pr_number = 1
 
-    owner = "JabRef" 
-    repo = "JabRef"
-    pr_number = 10592
+    # owner = "JabRef" 
+    # repo = "JabRef"
+    # pr_number = 10592
 
     pr_info = fetch_pr_info(owner, repo, pr_number)
     output_dict.update({"prInfo":pr_info})
 
-    commits_data = get_pr_commits(owner, repo, pr_number)
+    commits_data = fetch_pr_commits(owner, repo, pr_number)
     output_dict.update({"commits":commits_data})
 
-    review_threads = fetch_all_review_threads(owner, repo, pr_number)
+    review_threads = fetch_review_threads(owner, repo, pr_number)
     output_dict.update({"reviewThreads":review_threads})
 
-    comments = get_pr_comments(owner, repo, pr_number)
+    comments = fetch_pr_comments(owner, repo, pr_number)
     output_dict.update({"comments":comments})
 
     reviews = fetch_reviews(owner, repo, pr_number)

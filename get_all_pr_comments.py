@@ -35,18 +35,20 @@ class GitHubAllPRDetailsFetcher:
         self.pr_ids_fetcher = GitHubPRIDsFetcher(config_path, token_path)
         self.pr_comments_fetcher = GitHubPRCommentsFetcher(config_path, token_path)
     
-    def get_all_pr_details(self, owner: str, repo: str, states: List[str] = None, fetch_code_snippet: bool = False) -> List[Dict[str, Any]]:
+    def get_all_pr_details(self, owner: str, repo: str, states: List[str] = None, fetch_code_snippet: bool = False, output_file: str = None, resume: bool = False) -> int:
         """
-        获取所有符合条件的PR的详细信息
+        获取所有符合条件的PR的详细信息，支持一边处理一边写入文件
         
         Args:
             owner: 仓库所有者
             repo: 仓库名称
             states: PR状态过滤列表，可选值：OPEN, CLOSED, MERGED
             fetch_code_snippet: 是否获取文件的完整代码内容
+            output_file: 输出文件路径，如果指定则一边处理一边写入
+            resume: 是否从上次中断的地方继续处理
             
         Returns:
-            List[Dict[str, Any]]: 包含所有PR详细信息的列表，每个字典都包含prID字段
+            int: 成功处理的PR数量
         """
         print(f"正在获取 {owner}/{repo} 仓库中状态为 {states or 'ALL'} 的PR ID列表...")
         
@@ -55,31 +57,88 @@ class GitHubAllPRDetailsFetcher:
         
         if not pr_ids:
             print("未找到符合条件的PR")
-            return []
+            return 0
         
-        print(f"找到 {len(pr_ids)} 个符合条件的PR，开始获取详细信息...")
-        
-        all_pr_details = []
-        
-        for i, pr_id in enumerate(pr_ids, 1):
-            print(f"正在处理第 {i}/{len(pr_ids)} 个PR (ID: {pr_id})...")
-            
+        # 断点续传逻辑
+        processed_ids = set()
+        if output_file and resume and os.path.exists(output_file):
             try:
-                # 获取单个PR的详细信息
-                pr_details = self.pr_comments_fetcher.fetch_pr_data(owner, repo, pr_id, fetch_code_snippet)
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            data = json.loads(line)
+                            if 'prID' in data:
+                                processed_ids.add(data['prID'])
+                print(f"发现已处理 {len(processed_ids)} 个PR，将从断点继续...")
+            except Exception as e:
+                print(f"读取断点信息时出错: {e}")
+        
+        # 过滤掉已处理的PR
+        remaining_ids = [pr_id for pr_id in pr_ids if pr_id not in processed_ids]
+        if not remaining_ids:
+            print("所有PR都已处理完成")
+            return len(processed_ids)
+        
+        print(f"找到 {len(remaining_ids)} 个待处理的PR，开始获取详细信息...")
+        
+        success_count = len(processed_ids)
+        
+        # 选择处理方式
+        if output_file:
+            # 一边处理一边写入文件
+            try:
+                mode = 'a' if resume and os.path.exists(output_file) else 'w'
+                with open(output_file, mode, encoding='utf-8') as f:
+                    for i, pr_id in enumerate(remaining_ids, 1):
+                        print(f"正在处理第 {i}/{len(remaining_ids)} 个PR (ID: {pr_id})...")
+                        
+                        try:
+                            # 获取单个PR的详细信息
+                            pr_details = self.pr_comments_fetcher.fetch_pr_data(owner, repo, pr_id, fetch_code_snippet)
+                            
+                            # 添加prID字段
+                            pr_details['prID'] = pr_id
+                            
+                            # 立即写入文件
+                            json_line = json.dumps(pr_details, ensure_ascii=False)
+                            f.write(json_line + '\n')
+                            f.flush()  # 确保数据立即写入磁盘
+                            
+                            success_count += 1
+                            
+                        except Exception as e:
+                            print(f"获取PR {pr_id} 的详细信息时出错: {e}")
+                            # 继续处理下一个PR，不中断整个流程
+                            continue
                 
-                # 添加prID字段
-                pr_details['prID'] = pr_id
-                
-                all_pr_details.append(pr_details)
+                print(f"数据已逐行保存到: {output_file}")
                 
             except Exception as e:
-                print(f"获取PR {pr_id} 的详细信息时出错: {e}")
-                # 继续处理下一个PR，不中断整个流程
-                continue
+                print(f"写入文件时出错: {e}")
+                return success_count
+        else:
+            # 传统方式：收集到内存中
+            all_pr_details = []
+            for i, pr_id in enumerate(remaining_ids, 1):
+                print(f"正在处理第 {i}/{len(remaining_ids)} 个PR (ID: {pr_id})...")
+                
+                try:
+                    # 获取单个PR的详细信息
+                    pr_details = self.pr_comments_fetcher.fetch_pr_data(owner, repo, pr_id, fetch_code_snippet)
+                    
+                    # 添加prID字段
+                    pr_details['prID'] = pr_id
+                    
+                    all_pr_details.append(pr_details)
+                    success_count += 1
+                    
+                except Exception as e:
+                    print(f"获取PR {pr_id} 的详细信息时出错: {e}")
+                    # 继续处理下一个PR，不中断整个流程
+                    continue
         
-        print(f"成功获取了 {len(all_pr_details)} 个PR的详细信息")
-        return all_pr_details
+        print(f"成功获取了 {success_count} 个PR的详细信息")
+        return success_count
     
     def save_to_file(self, data: List[Dict[str, Any]], output_file: str):
         """
@@ -168,6 +227,7 @@ def main():
   python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.json
   python get_all_pr_comments.py JabRef jabref --states MERGED --fetch-code-snippet --output jabref_merged_prs.json
   python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.jsonl --store-by-line
+  python get_all_pr_comments.py JabRef jabref --output jabref_all_prs.json --resume
         """
     )
     
@@ -204,6 +264,11 @@ def main():
         action='store_true',
         help='获取文件的完整代码内容 (默认: 不获取)'
     )
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='从上次中断的地方继续处理 (仅在指定输出文件时可用)'
+    )
     
     args = parser.parse_args()
     
@@ -212,6 +277,13 @@ def main():
         # 检查是否明确指定了输出文件（通过检查命令行参数）
         if '--output' not in sys.argv:
             print("错误: --store-by-line 选项只能在明确指定 --output 输出文件时使用")
+            sys.exit(1)
+    
+    # 检查 resume 选项的使用条件
+    if args.resume:
+        # 检查是否明确指定了输出文件（通过检查命令行参数）
+        if '--output' not in sys.argv:
+            print("错误: --resume 选项只能在明确指定 --output 输出文件时使用")
             sys.exit(1)
     
     # 检查配置文件是否存在
@@ -223,31 +295,24 @@ def main():
         # 创建获取器实例
         fetcher = GitHubAllPRDetailsFetcher(args.config, args.token)
         
-        # 根据 store_by_line 选项选择不同的处理方式
+        # 根据参数选择处理方式
         if args.store_by_line:
             # 使用逐行写入方式
             success_count = fetcher.get_all_pr_details_by_line(args.owner, args.repo, args.output, args.states, args.fetch_code_snippet)
-            
-            # 显示统计信息
-            print(f"\n=== 统计信息 ===")
-            print(f"总共获取了 {success_count} 个PR的详细信息")
-            
-            if success_count == 0:
-                print("未获取到任何PR详细信息")
         else:
-            # 使用传统方式（将所有数据保存在内存中）
-            pr_details = fetcher.get_all_pr_details(args.owner, args.repo, args.states, args.fetch_code_snippet)
-            
-            if pr_details:
-                # 保存到文件
-                fetcher.save_to_file(pr_details, args.output)
-                
-                # 显示统计信息
-                print(f"\n=== 统计信息 ===")
-                print(f"总共获取了 {len(pr_details)} 个PR的详细信息")
-                
-            else:
-                print("未获取到任何PR详细信息")
+            # 使用改进的方式，支持一边处理一边写入文件
+            success_count = fetcher.get_all_pr_details(
+                args.owner, args.repo, args.states, args.fetch_code_snippet, 
+                args.output if '--output' in sys.argv else None, 
+                args.resume
+            )
+        
+        # 显示统计信息
+        print(f"\n=== 统计信息 ===")
+        print(f"总共获取了 {success_count} 个PR的详细信息")
+        
+        if success_count == 0:
+            print("未获取到任何PR详细信息")
             
     except KeyboardInterrupt:
         print("\n用户中断操作")
