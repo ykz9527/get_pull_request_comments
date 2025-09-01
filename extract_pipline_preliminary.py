@@ -15,28 +15,28 @@ def main():
         "pr_number": 10592,
     }
 
-    with open("output/all_text.json",'r')as f:
+    with open(f"output/pr_data_py_github_{pr_info['pr_number']}.json",'r')as f:
         pr_data = json.load(f)
 
     review_threads = pr_data["reviewThreads"]
-    commits = pr_data["commits"]
-    comments = pr_data["comments"]
-    reviews = pr_data["reviews"]
+    globalDiscussions = pr_data["globalDiscussions"]
+    # reviews = pr_data["reviews"]
 
-    review_thread_suggestion_list = extract_review_thread_pipeline(review_threads,commits,pr_info)
-    comment_suggestion_list = extract_comment_and_review_pipeline(comments,"评论")
-    review_suggestion_list = extract_comment_and_review_pipeline(reviews,"评审")
+    review_thread_suggestion_list = extract_review_thread_pipeline(review_threads,globalDiscussions)
+    # review_thread_suggestion_list = []
+    comment_suggestion_list = extract_comment_and_review_pipeline(globalDiscussions)
+    # review_suggestion_list = extract_comment_and_review_pipeline(reviews,"评审")
 
     all_suggestions = {
         "reviewThreadSuggestions": review_thread_suggestion_list,
         "commentSuggestions": comment_suggestion_list,
-        "reviewSuggestions": review_suggestion_list,
+        # "reviewSuggestions": review_suggestion_list,
     }
 
     with open(f"output/all_suggestions_{pr_info['pr_number']}_{time.ctime()}.json",'w')as f:
         json.dump(all_suggestions,f,indent=2,ensure_ascii=False)
 
-def extract_comment_and_review_pipeline(comments_or_reviews,content_type:str):
+def extract_comment_and_review_pipeline(comments_or_reviews):
     """
     提取 comment 中的 suggestion 的 pipeline
     
@@ -49,37 +49,40 @@ def extract_comment_and_review_pipeline(comments_or_reviews,content_type:str):
     """
 
     suggestion_list = []
-
+    comment_body_list = []
     for comment in comments_or_reviews:
         default_logger.info(f"start process comment [{comment['id']}]")
         if comment["body"].strip() == "":
-            default_logger.info(f"[{content_type}] [{comment['id']}] is empty")
+            default_logger.info(f"[{comment['id']}] is empty")
             continue
-        comment_body = comment["body"]
+        comment_body_list.append({
+            'author': comment['author'],
+            'body': comment['body'],
+        })
 
-        comment_prompt = prompt.extract_suggestions_by_comment_and_review(comment_body,content_type)
-        default_logger.debug(f"[{content_type}] [{comment['id']}] prompt: [{comment_prompt}]")
+    comment_prompt = prompt.extract_suggestion_by_dialog_with_code(comment_body_list,"","",0,0)
+    default_logger.debug(f"prompt: [{comment_prompt}]")
 
-        retry_times = 5
-        while retry_times > 0:
-            try:
-                model_client = llm_client.get_llm_client("deepseek-chat")
-                response = model_client.generate_text([{"role": "user", "content": comment_prompt}])
-                default_logger.debug(f"[{content_type}] [{comment['id']}] model response: [{response}]")
-                suggestion_list.append({
-                    "commentId": comment["id"],
-                    "suggestions": json.loads(response),
-                })
-                break
-            except Exception as e:
-                default_logger.error(f"[{content_type}] [{comment['id']}] has error: [{e}]")
-                retry_times -= 1
-                continue
+    retry_times = 5
+    while retry_times > 0:
+        try:
+            model_client = llm_client.get_llm_client("deepseek-chat")
+            response = model_client.generate_text([{"role": "user", "content": comment_prompt}])
+            default_logger.debug(f"[{comment['id']}] model response: [{response}]")
+            suggestion_list.append({
+                "commentId": comment["id"],
+                "review": json.loads(response),
+            })
+            break
+        except Exception as e:
+            default_logger.error(f"[{comment['id']}] has error: [{e}]")
+            retry_times -= 1
+            continue
 
     return suggestion_list
 
 
-def extract_single_review_thread(review_thread,commit,pr_info):
+def extract_single_review_thread(review_thread,globalDiscussions):
     """
     提取单个 review thread 的 pipiline
     
@@ -91,24 +94,34 @@ def extract_single_review_thread(review_thread,commit,pr_info):
     Returns:
         list: suggestions
     """
-    try:
-        code_snippet = githubutil.fetch_file_content(pr_info["owner"],pr_info["repo"],commit["oid"],review_thread["path"])
-        if code_snippet is None or code_snippet.strip() == "":
-            default_logger.warning(f"when extract review thread [{review_thread['id']}], has not found code snippet {review_thread['path']} related")
-            raise ValueError(f"when extract review thread [{review_thread['id']}], has not found code snippet {review_thread['path']} related")
-    except Exception as e:
-        default_logger.error(f"when extract review thread [{review_thread['id']}], has error: [{e}]")
-        raise e
-
+    # try:
+    #     code_snippet = githubutil.fetch_file_content(pr_info["owner"],pr_info["repo"],commit["oid"],review_thread["path"])
+    #     if code_snippet is None or code_snippet.strip() == "":
+    #         default_logger.warning(f"when extract review thread [{review_thread['id']}], has not found code snippet {review_thread['path']} related")
+    #         raise ValueError(f"when extract review thread [{review_thread['id']}], has not found code snippet {review_thread['path']} related")
+    # except Exception as e:
+    #     default_logger.error(f"when extract review thread [{review_thread['id']}], has error: [{e}]")
+    #     raise e
+    diffHunk = review_thread["diffHunk"]
     comments_in_review_thread = []
 
     for comment in review_thread["comments"]["nodes"]:
         comments_in_review_thread.append(
             {
-                "user": comment["author"]["login"],
+                "user": comment["author"],
                 "comment": comment["body"],
             }
         )
+    if review_thread['related_review_body_id'] is not None:
+        id = review_thread['related_review_body_id']
+        # globalDiscussions is a list, need to find matching id
+        matching_discussion = next((d for d in globalDiscussions if d['id'] == id), None)
+        if matching_discussion:
+            comment_summary = matching_discussion['body']
+        else:
+            comment_summary = ""
+    else:
+        comment_summary = ""
 
     start_line = None
     end_line = None
@@ -123,7 +136,7 @@ def extract_single_review_thread(review_thread,commit,pr_info):
         default_logger.error(f"[{review_thread['id']}] has no originalLine")
         raise ValueError(f"[{review_thread['id']}] has no originalLine")
     
-    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code(comments_in_review_thread, code_snippet,start_line,end_line)
+    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
 
     model_client = llm_client.get_llm_client("deepseek-chat")
     default_logger.debug(f"when extract review thread [{review_thread['id']}], suggestion_prompt: [{suggestion_prompt}]")
@@ -143,7 +156,7 @@ def extract_single_review_thread(review_thread,commit,pr_info):
 
     raise Exception(f"when extract review thread [{review_thread['id']}], reached max retry times")
     
-def extract_review_thread_pipeline(review_threads,commits,pr_info):
+def extract_review_thread_pipeline(review_threads,globalDiscussions):
     """
     提取 review thread 中的设计决策的 pipeline
     
@@ -165,18 +178,18 @@ def extract_review_thread_pipeline(review_threads,commits,pr_info):
                 continue
 
             default_logger.info(f"looking for the commit just before the comment of review_thread: [{review_thread['id']}]")
-            commit_just_before = find_commit_just_before_target_time(commits, review_thread["comments"]["nodes"][0]["createdAt"])
-            if commit_just_before is None:
-                default_logger.warning(f"review_thread: [{review_thread['id']}] has no commit just before the comment")
-                continue
+            # commit_just_before = find_commit_just_before_target_time(commits, review_thread["comments"]["nodes"][0]["createdAt"])
+            # if commit_just_before is None:
+            #     default_logger.warning(f"review_thread: [{review_thread['id']}] has no commit just before the comment")
+            #     continue
 
-            default_logger.info(f"review_thread: [{review_thread['id']}] has commit: [{commit_just_before['oid']}] just before the comment")
+            # default_logger.info(f"review_thread: [{review_thread['id']}] has commit: [{commit_just_before['oid']}] just before the comment")
             default_logger.info(f"start to extract suggestion of review_thread: [{review_thread['id']}]")
-            suggestion = extract_single_review_thread(review_thread,commit_just_before,pr_info)
+            suggestion = extract_single_review_thread(review_thread,globalDiscussions)
 
             suggestion_list.append({
                 "reviewThreadId": review_thread["id"],
-                "suggestions": suggestion,
+                "review": suggestion,
             })
 
         except Exception as e:

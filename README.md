@@ -13,13 +13,14 @@ GitHub 提供了多种API接口来获取 PR 的详细信息：
 想要获取 GitHub 页面的内容，把链接复制下来给各个大模型的网页工具（我用的 grok ）就能帮你写 GraphQL 脚本。
 如果这些脚本没法满足你的要求，你可以自己复制链接给大模型就可以。
 
-以下是这 4 个脚本的介绍。
+以下是这些脚本的介绍。
 
-这是一个GitHub Pull Request工具集，包含四个主要功能：
+这是一个GitHub Pull Request工具集，包含五个主要功能：
 1. **获取PR详细内容** - 获取指定PR的讨论内容、评论、代码审查等详细信息
 2. **获取PR ID列表** - 获取仓库中所有或特定状态的Pull Request ID列表
 3. **批量获取PR详细信息** - 整合前两个功能，批量获取所有符合条件的PR的详细信息
 4. **GFM内容处理** - 将GitHub Flavored Markdown内容转换为纯文本格式
+5. **PR分析Pipeline** - 批量获取指定PR的数据并进行设计知识提取（支持灵活的PR编号指定）
 
 提供两种API实现方式：
 - **GraphQL版本**：使用GitHub GraphQL API（复杂但功能全面）
@@ -437,6 +438,173 @@ python process_gfm_content.py "input.json" "output.json" --verbose
 }
 ```
 
+### 5. PR分析Pipeline (process_pr_pipeline.py)
+
+#### 功能特性
+
+- **灵活的PR指定**：支持单个PR、连续范围、不连续列表或混合指定方式
+- **智能分析**：自动调用AI模型提取设计知识和技术建议
+- **错误恢复**：单个PR失败不影响整体流程，提供详细错误日志
+- **进度跟踪**：实时显示处理进度和统计信息
+- **结果管理**：自动保存原始数据、提取结果和处理摘要
+- **环境检查**：自动检查配置文件和API密钥
+
+#### 命令行格式
+
+```bash
+python process_pr_pipeline.py <owner> <repo> --prs PR1 [PR2 ...] [--output output_dir] [--config config.yaml]
+```
+
+#### 参数说明
+
+- `owner`: 仓库所有者（必需）
+- `repo`: 仓库名称（必需）
+- `--prs`: PR编号列表（必需），支持以下格式：
+  - 单个PR编号：`10590`
+  - 连续范围：`10590-10600`（包含起始和结束）
+  - 混合使用：`10590 10595 10600-10610 10615`
+- `--output`: 输出目录路径（默认: output）
+- `--config`: 配置文件路径（默认: config.yaml）
+- `--token`: GitHub Personal Access Token文件路径（默认: PAT.token）
+
+#### 使用示例
+
+```bash
+# 处理单个PR
+python process_pr_pipeline.py JabRef jabref --prs 10590
+
+# 处理多个不连续的PR
+python process_pr_pipeline.py JabRef jabref --prs 10590 10595 10600
+
+# 处理连续范围的PR（相当于旧版本的10590到10600）
+python process_pr_pipeline.py JabRef jabref --prs 10590-10600
+
+# 混合使用（单个、范围、多个）
+python process_pr_pipeline.py JabRef jabref --prs 10590 10595 10600-10610 10615
+
+# 指定输出目录
+python process_pr_pipeline.py JabRef jabref --prs 10590-10600 --output results/jabref_batch
+
+# 使用自定义配置文件
+python process_pr_pipeline.py JabRef jabref --prs 10590-10600 --config my_config.yaml --token my_token.token
+```
+
+#### PR编号格式说明
+
+**支持的输入格式：**
+1. **单个数字**：`10590` - 处理单个PR
+2. **范围格式**：`10590-10600` - 处理从10590到10600的所有PR（包括边界）
+3. **混合使用**：`10590 10595 10600-10610 10615` - 可以组合使用多种格式
+
+**格式特点：**
+- 自动去重：如果指定了重复的PR编号，系统会自动去重
+- 自动排序：PR编号会按照数字大小排序处理
+- 错误提示：如果格式错误，会显示详细的错误信息和正确格式示例
+
+#### 环境要求
+
+在运行批量分析pipeline之前，需要确保：
+
+1. **GitHub配置**：
+   - `PAT.token` 文件包含有效的GitHub Personal Access Token
+   - `config.yaml` 文件配置正确
+
+2. **AI模型配置**：
+   - 设置 `DEEPSEEK_API_KEY` 环境变量
+   - 确保API密钥有效且有足够配额
+
+3. **Python环境**：
+   ```bash
+   # 设置DeepSeek API密钥
+   export DEEPSEEK_API_KEY="your_deepseek_api_key"
+   
+   # 或创建.env文件
+   echo "DEEPSEEK_API_KEY=your_deepseek_api_key" > .env
+   source .env
+   ```
+
+#### 输出文件说明
+
+脚本会在指定的输出目录中生成以下文件：
+
+1. **原始PR数据**：`pr_data_{pr_number}.json`
+   - 每个PR的完整原始数据
+   - 用于调试和后续分析
+
+2. **批量处理结果**：`batch_results_{owner}_{repo}_{start_pr}_{end_pr}_{timestamp}.json`
+   ```json
+   {
+     "batchInfo": {
+       "owner": "JabRef",
+       "repo": "jabref", 
+       "startPr": 10590,
+       "endPr": 10600,
+       "processedAt": "2024-01-01T10:00:00Z",
+       "completedAt": "2024-01-01T10:30:00Z",
+       "processingTimeSeconds": 1800
+     },
+     "results": [
+       {
+         "prNumber": 10590,
+         "status": "success",
+         "suggestions": {
+           "reviewThreadSuggestions": [...],
+           "commentSuggestions": [...]
+         }
+       }
+     ],
+     "statistics": {...}
+   }
+   ```
+
+3. **处理摘要**：`batch_summary_{owner}_{repo}_{start_pr}_{end_pr}_{timestamp}.json`
+   ```json
+   {
+     "batchInfo": {
+       "repository": "JabRef/jabref",
+       "totalPRs": 11,
+       "processingTimeSeconds": 1800,
+       "averageTimePerPR": 163.6
+     },
+     "fetchStatistics": {
+       "successful": 10,
+       "failed": 1,
+       "successRate": 90.9
+     },
+     "extractionStatistics": {
+       "successful": 9,
+       "failed": 1,
+       "successRate": 81.8
+     },
+     "overallStatistics": {
+       "overallSuccessRate": 81.8
+     }
+   }
+   ```
+
+#### 性能建议
+
+1. **批量大小**：建议每次处理10-50个PR，避免一次处理过多导致超时
+2. **API配额**：监控GitHub API和AI模型API的使用情况
+3. **网络稳定性**：确保网络连接稳定，处理大批量时可能需要较长时间
+4. **错误处理**：如果遇到大量失败，检查配置和网络连接
+
+#### 故障排除
+
+1. **GitHub API错误**：
+   - 检查PAT token是否有效
+   - 确认仓库访问权限
+   - 检查API配额使用情况
+
+2. **AI模型API错误**：
+   - 验证DEEPSEEK_API_KEY是否设置正确
+   - 检查API配额是否充足
+   - 确认网络连接正常
+
+3. **PR不存在错误**：
+   - 确认指定的PR编号范围内的PR确实存在
+   - 检查仓库名和所有者是否正确
+
 #### 处理特性
 
 **GFM元素转换规则：**
@@ -524,14 +692,23 @@ python process_gfm_content.py "input.json" "output.json" --verbose
 ## 项目结构
 
 ```
-├── get_pr_comments.py      # PR详细内容获取脚本
-├── get_all_pr_brief.py     # PR ID列表获取脚本
-├── get_all_pr_comments.py  # 批量获取PR详细信息脚本
-├── process_gfm_content.py  # GFM内容处理脚本
-├── requirements.txt         # Python依赖包
-├── config.yaml             # 配置文件
-├── PAT.token              # GitHub Personal Access Token
-└── README.md              # 项目说明文档
+├── get_pr_comments.py               # PR详细内容获取脚本（GraphQL版本）
+├── get_pr_comments_py_github.py     # PR详细内容获取脚本（PyGithub版本，推荐）
+├── get_all_pr_brief.py              # PR ID列表获取脚本
+├── get_all_pr_comments.py           # 批量获取PR详细信息脚本
+├── process_gfm_content.py           # GFM内容处理脚本
+├── process_pr_pipeline.py           # PR分析Pipeline脚本（支持灵活PR编号指定）
+├── extract_pipline_preliminary.py   # 设计知识提取模块
+├── fetch_each_part_in_pr_util.py    # PR数据获取工具模块
+├── util/                            # 工具模块目录
+│   ├── ai/                          # AI相关模块
+│   │   ├── llm_client.py            # LLM客户端
+│   │   └── prompt.py                # 提示词模板
+│   └── logging.py                   # 日志工具
+├── requirements.txt                 # Python依赖包
+├── config.yaml                      # GitHub API配置文件
+├── PAT.token                        # GitHub Personal Access Token
+└── README.md                        # 项目说明文档
 ```
 
 ## API限制

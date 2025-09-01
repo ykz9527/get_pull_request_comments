@@ -171,7 +171,7 @@ class GitHubPRCommentsFetcher:
             raise Exception(f"GitHub API错误: {e}")
 
         # 构建PR基本信息
-        pr_data = {
+        prInfo = {
             "title": pr.title,
             "body": pr.body,
             "url": pr.html_url,
@@ -181,6 +181,10 @@ class GitHubPRCommentsFetcher:
             "baseRefOid": pr.base.sha,
             "headRefOid": pr.head.sha,
             "author": pr.user.login if pr.user else None
+        }
+
+        pr_data = {
+            "prInfo": prInfo
         }
 
         # 获取提交记录
@@ -210,19 +214,14 @@ class GitHubPRCommentsFetcher:
         pr_data["closingIssuesReferences"] = {"nodes": linked_issues_info}
         for commit in commits:
             commit_info = {
-                "commit": {
                     "oid": commit.sha,
                     "message": commit.commit.message,
                     "committedDate": self._format_datetime(commit.commit.committer.date),
                     "author": commit.author.login if commit.author else None
-                }
             }
             commits_data.append(commit_info)
 
-        pr_data["commits"] = {
-            "totalCount": len(commits_data),
-            "nodes": commits_data
-        }
+        pr_data["commits"] = commits_data
 
         # 获取普通评论 (issue comments)
         comments_data = []
@@ -237,7 +236,7 @@ class GitHubPRCommentsFetcher:
             }
             comments_data.append(comment_info)
 
-        pr_data["comments"] = {"nodes": comments_data}
+        pr_data["comments"] = comments_data
 
         # 获取文件变更
         files_data = []
@@ -251,7 +250,7 @@ class GitHubPRCommentsFetcher:
             }
             files_data.append(file_info)
 
-        pr_data["files"] = {"nodes": files_data}
+        pr_data["files"] = files_data
 
         # 构建时间线提交信息（用于后续的评论匹配）
         timeline_commits = []
@@ -282,9 +281,9 @@ class GitHubPRCommentsFetcher:
 
         # 获取代码审查评论和线索（传入reviews_data用于关联）
         review_threads_data = self._build_review_threads(pr, reviews_data)
-        pr_data["reviewThreads"] = {"nodes": review_threads_data}
+        pr_data["reviewThreads"] = review_threads_data
 
-        pr_data["reviews"] = {"nodes": reviews_data}
+        pr_data["reviews"] = reviews_data
 
         # 添加时间线信息以保持兼容性
         pr_data["timelineItems"] = {
@@ -442,6 +441,7 @@ class GitHubPRCommentsFetcher:
                 "isOutdated": top_comment.position is None,  # 如果position为None表示可能过时
                 "path": top_comment.path,
                 "line": top_comment.line,
+                "diffHunk": getattr(top_comment, 'diff_hunk', None),
                 "startLine": getattr(top_comment, 'start_line', None),
                 "originalLine": getattr(top_comment, 'original_line', None),
                 "originalStartLine": getattr(top_comment, 'original_start_line', None),
@@ -649,13 +649,13 @@ class GitHubPRCommentsFetcher:
             
             print(f"PR数据获取完成")
             
-            # 将配额信息添加到结果中
-            result = {
-                "prData": pr_data,
-                "apiUsage": simple_api_usage
-            }
-            
-            return result
+            # # 将配额信息添加到结果中
+            # result = {
+            #     "prData": pr_data,
+            #     "apiUsage": simple_api_usage
+            # }
+
+            return pr_data
         except Exception as e:
             error_data = {"error": str(e)}
             return error_data
