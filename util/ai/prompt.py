@@ -44,7 +44,7 @@ Now, classify this message: {message}
 """ 
     return prompt
 
-def extract_suggestion_by_dialog_with_code(dialog, code, comment, start_line, end_line):
+def extract_opinion_by_dialog_with_code(dialog, code, comment, start_line, end_line):
     """
     从GitHub代码评审对话中提取设计知识的prompt生成器
     
@@ -71,44 +71,31 @@ def extract_suggestion_by_dialog_with_code(dialog, code, comment, start_line, en
     prompt = f"""你是一个软件工程专家，需要从 GitHub 上程序员的代码评审对话中提取有价值的设计知识和最佳实践。
 
 ## 重要约束
-**严格要求：只能提取对话中开发者明确讨论或建议的内容，除了condition和type字段,其他字段绝对不能基于代码推断或添加对话中未涉及的建议！**
+-**严格要求：只能提取对话中开发者明确讨论或建议的内容，除了 condition 字段,其他字段绝对不能基于代码推断或添加对话中未涉及的建议！**
 
 ## 任务说明
-仔细阅读程序员对话内容，**仅提取**对话中明确提到的设计建议和技术决策，重点关注：
-- 开发者在对话中明确提出的问题或需求
-- 开发者在对话中明确提出的建议或推荐做法
-- 开发者在对话中明确提出的论据或理由
+仔细阅读程序员对话内容，仅提取对话中明确提到的设计建议和技术决策，重点关注：
+- 开发者在对话中明确提出的问题、挑战或需要解决的技术难点
+- 开发者在对话中明确提出的具体解决方案、技术选型或实现建议
+- 开发者在对话中明确提出的支持其建议的理由、论据或技术依据
+- 开发者在对话中明确或暗示的适用条件、前提假设或限制因素
 
 ## 输出格式
 请按以下 JSON 格式输出提取的设计知识：
 [
   {{
-    "problem": "现有代码的问题",
-    "suggestion": "具体的设计建议或推荐做法",
-    "reasons": ["支持该建议的理由或论据"],
+    "subject": "这个设计建议、技术决策、观点所关注的问题",
+    "opinion": "具体的设计建议和推荐做法",
+    "arguments": ["支持该建议的理由或论据"],
     "condition": ["建议的一些前提条件"],
-    "type": "建议的类型",
-    "reference": ["建议的参考来源"]
   }}
 ]
 
 ## 字段说明
-"problem": "这个字段代表了“为什么需要讨论？”或者说“我们试图解决的上下文是什么？”。它记录了触发这次设计讨论的根本原因。比如，我们发现用户在网络不好的情况下，图片加载体验非常糟糕。"
-"suggestion": "这个字段是“我们应该做什么？”的答案。它是整个设计知识的核心，是一个具体的、可操作的行动方案或技术选型。它应该是一个明确的指导，而不是一个模糊的方向。比如，最好是将这个大的 Service 类拆分成多个更小的、职责单一的类。"
-"reasons": "这个字段回答了“为什么这个建议（Suggestion）是好的？”。它为 suggestion 提供了理论支持和逻辑依据，是说服他人接受该建议的关键。比如，因为缓存可以把常用的数据放在内存里，避免了每次都去查数据库，能极大提升响应速度。"
-"condition": "这个字段记录了建议的一些前提条件，比如建议的适用范围，建议的限制条件，等等。这个字段允许一定的推测，也就是讨论中开发者可能没有明确提到的"
-"type": "这个字段记录了建议的类型，包括 architecture design, code style, performance optimization, vulnerability security, testing and maintenance, error handling, user experience, environment configuration。这个字段允许一定的推测，也就是讨论中开发者可能没有明确提到的"
-"reference": "这个字段记录了建议的参考来源，即，对话中某个或几个开发者的评论。这个字段应该是你提取 suggestion 字段的直接依据。你不需要把附和其他开发者和表达同意的评论也包含进来，只包含核心的评论就可以。例如：你不应该包含 'I agree'、'Good idea' 等表示附和和同意的发言。"
-
-## Type 字段中的类型如下：
-- architecture design: 涉及关于软件系统整体结构、组件和组织的宏观决策，以确保可扩展性、模块化和可维护性。示例：使用 PredatoryJournalListManager 统一管理项目中的掠夺性期刊的数据流，而不是自己实现数据管理。
-- code style: 涉及编写干净、可读且一致的代码的规范和指南，例如命名约定、缩进或格式规则。示例：不要使用单字母变量，例如 int x，而是使用有意义的变量名，例如 int journalCount。
-- performance optimization: 专注于提高代码执行效率的技术，减少 CPU、内存或时间等资源的使用。示例：建议为频繁访问的数据库查询实现缓存，以减少 Web 
-- vulnerability security: 涉及识别和缓解与安全漏洞相关的风险，例如防止注入攻击、未经授权的访问或数据泄露。示例：建议对用户提交的表单进行输入净化，以防止 SQL 注入攻击。
-- testing and maintenance: 涵盖编写测试、确保代码可靠性以及使代码库易于更新或调试的策略。示例：需要为 PredatoryJournalListManager 的更改添加测试用例，以确保其行为符合预期。
-- error handling: 涉及检测、报告和从错误或异常中恢复的方法，以使应用程序更健壮且用户友好。示例：外部 API 调用出错时，返回一个空 List 而不是直接抛出异常。
-- user experience: 涉及提升最终用户与软件交互时的可用性、可访问性和满意度的设计选择。示例：建议在 API 调用期间添加加载指示器，以避免用户认为应用程序卡死。
-- environment configuration: 涉及设置和管理开发、测试或生产环境，包括工具、依赖或部署设置。示例：将 PredatoryJournalListMvGenerator 挂接到 build.gradle 文件中描述的构建过程中。
+"subject": "这个字段代表了触发讨论的核心问题或挑战，即'为什么需要讨论这个话题？'它描述了开发者试图解决的技术难点、性能问题、架构缺陷或用户体验问题等。例如：'在应用运行时获取和处理数据，会导致性能瓶颈和不稳定的网络依赖'。"
+"opinion": "这个字段是对'我们应该如何解决这个问题？'的具体回答。它必须是一个明确的、可操作的技术建议或解决方案，而不是模糊的方向性指导。可以包括具体的实现方法、架构选择、设计模式等。例如：'在项目构建时预先生成一个静态的、优化过的数据库文件，应用在运行时只负责加载这个本地文件'。"
+"arguments": "这个字段解释了'为什么这个建议是合理的？'它提供了支持该建议的技术理由、性能优势、架构好处或最佳实践依据。这些论据应该能够说服其他开发者接受该建议。例如：['与项目现有架构保持一致', '极大提升应用启动性能，避免UI冻结']。"
+"condition": "这个字段记录了建议成功实施所需的前提条件、适用范围或技术限制。这可以包括环境要求、依赖条件、技术约束等。这个字段允许适度的合理推测，即使对话中没有明确提及。例如：['用户的运行环境必须有稳定的互联网连接', 'JabRef 应用必须被授予发起网络请求的权限']。"
 
 ## 提取原则
 1. **必须基于对话**：每个建议都必须能在对话中找到对应的明确表述,只从对话内容中抽取表述
@@ -117,9 +104,10 @@ def extract_suggestion_by_dialog_with_code(dialog, code, comment, start_line, en
 4. **精确匹配**：建议的表述应该忠实于对话中的原始表达
 
 ## 补充说明
-- 如果对话中没有提及问题，问题字段（problem）为空字符串
-- 建议字段（suggestion）不能是空字符串
-- reference 字段不能是空数组
+- subject 字段不能是空字符串，必须明确描述讨论的问题或挑战
+- opinion 字段不能是空字符串，必须包含具体的技术建议
+- arguments 数组不能是空数组，必须包含至少一个支持理由
+- condition 数组可以是空数组，但建议尽量填充相关的前提条件
 - 你可以在提取的建议和论据中添加自然语言描述的相关背景，比如代码的上下文，代码的功能，等等
 - 你的输出应该是**英文**
 - 你的输出应该是能够被程序直接解析成 JSON 格式的字符串，不要输出其他任何的标记、说明，不要将你输出的内容包含在 ```json ``` 块中
@@ -127,33 +115,34 @@ def extract_suggestion_by_dialog_with_code(dialog, code, comment, start_line, en
 ## 输出示例:
 [
   {{
-  "problem": "每次调用 loadrepository() 都需要从网络获取掠夺性期刊的更新，效率低下。",
-  "suggestion": "建议修改 JournalListMvGenerator，让它直接为掠夺性期刊生成一个本地的 .mv 文件。",
-  "reasons": [
-    "这样做只需要在文件更新时生成一次，之后的所有调用都可以直接从本地加载，无需访问网络。",
-    "尝试使用 BackgroundTask 包装器来解决此问题很困难，并且会导致 MainArchitectureTest 测试失败。"
-  ],
-  "condition": ["在 JournalListMvGenerator 中直接为掠夺性期刊生成一个 .mv 文件更合理。"],
-  "type": "性能优化",
-  "reference": ["Repeatedly calling `loadrepository()` downloads updates of predatory journals from the network multiple times, which is highly inefficient. Please modify `JournalListMvGenerator` to generate a local `.mv` cache each time."]
+    "subject": "在应用运行时获取和处理数据，会导致性能瓶颈和不稳定的网络依赖。",
+    "opinion": "在应用运行时动态加载、更新和处理掠夺性期刊列表。",
+    "arguments": ["可以确保用户总是使用最新的数据列表"],
+    "condition": ["用户的运行环境必须有稳定的互联网连接", "JabRef 应用必须被授予发起网络请求的权限"]
   }},
   {{
-    "problem": "mac上部署时报错，Error: At least one of p12-filepath or p12-file-base64 must be provided",
-    "suggestion": "可以无视失败提醒",
-    "reasons": ["在macOS测试时需要用到github的加密签名秘钥，这可能会导致部署时的报这个错，不影响什么。"]
-  ],
-  "condition": [],
-  "type": "环境配置"
-  "reference": ["The deployment check for macOS is failing with the following error message:\r\n`Error: At least one of p12-filepath or p12-file-base64 must be provided`\r\n\r\nIs there something I need to do for this to pass?","Hi you can ignore the failing mac test. I does not work on forks because it require some github secrets for signing. We are working on trying to remove this run then for forks"]
+    "subject": "运行时处理数据的方式与项目现有成熟模式（如期刊缩写列表）不一致，且效率低下。",
+    "opinion": "在项目构建时（ON BUILD）预先生成一个静态的、优化过的数据库文件（.mv），应用在运行时（ON RUN）只负责加载这个本地文件。",
+    "arguments": ["与项目现有架构保持一致", "极大提升应用启动性能，避免UI冻结", "对离线用户和打包者友好"],
+    "condition": ["用于生成列表的外部数据源（如Beall's list等网站）必须是可抓取的，且其页面结构在构建期间保持相对稳定"]
   }},
   {{
-  "problem": "多个 Service 中存在重复的用户权限校验逻辑，导致代码冗余且难以维护。",
-  "suggestion": "建议使用AOP（面向切面编程）或拦截器（Interceptor）的方式，将权限校验逻辑抽取成一个独立的切面，统一处理所有需要权限验证的请求。",
-  "reasons": ["可以消除重复代码，提高代码复用性。", "当权限逻辑变更时，只需要修改一处，降低了维护成本。"]
-  ],
-  "condition": [],
-  "type": "架构设计"
-  "refernece":["There is already an Interceptor in the repository. We should use that instead of creating a new one to handle the permission check."]
+    "subject": "数据来源和状态管理分散，导致代码耦合和维护困难。",
+    "opinion": "(宏观思想) 确立 `PredatoryJournalRepository` 作为掠夺性期刊数据的“单一数据源 (Single Source of Truth)”。所有业务逻辑代码都应通过它来获取数据。",
+    "arguments": ["实现关注点分离，提高代码的可测试性和可维护性", "封装了数据加载和解析的复杂性"],
+    "condition": ["项目必须遵循依赖倒置原则，高层模块不应依赖于底层模块的具体实现"]
+  }},
+  {{
+    "subject": "直接返回 null 会导致调用方代码复杂且容易出现 NullPointerException。",
+    "opinion": "(微观实现) Repository 的数据加载方法在失败时不应返回 null，而应返回 `Optional<T>`。",
+    "arguments": ["强制调用方显式处理数据可能不存在的情况，避免了NPE", "这是一种更现代、更安全的Java编程范式"],
+    "condition": ["项目代码的 Java 版本必须在 8 或以上，以支持 Optional API"]
+  }},
+  {{
+    "subject": "初版代码在代码风格、命名和实现细节上存在大量不规范之处。",
+    "opinion": "对整体实现进行全面的代码质量与风格统一的重构。",
+    "arguments": ["提升代码的可读性和可维护性", "遵循Java社区和JabRef项目的编码规范"],
+    "condition": ["团队成员必须就统一的编码规范（如命名、日志格式等）达成共识"]
   }}
 ]
 

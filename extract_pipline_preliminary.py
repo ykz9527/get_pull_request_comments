@@ -5,6 +5,8 @@ import util.ai.prompt as prompt
 import json
 import time
 from util.logging import default_logger
+import hashlib
+import tqdm
 
 # source .env before you run this script, in this file is the LLM api key
 
@@ -20,21 +22,43 @@ def main():
 
     review_threads = pr_data["reviewThreads"]
     globalDiscussions = pr_data["globalDiscussions"]
-    # reviews = pr_data["reviews"]
 
-    review_thread_suggestion_list = extract_review_thread_pipeline(review_threads,globalDiscussions)
-    # review_thread_suggestion_list = []
     comment_suggestion_list = extract_comment_and_review_pipeline(globalDiscussions)
-    # review_suggestion_list = extract_comment_and_review_pipeline(reviews,"评审")
+    review_thread_suggestion_list = extract_review_thread_pipeline(review_threads,globalDiscussions)
 
     all_suggestions = {
         "reviewThreadSuggestions": review_thread_suggestion_list,
         "commentSuggestions": comment_suggestion_list,
-        # "reviewSuggestions": review_suggestion_list,
     }
 
     with open(f"output/all_suggestions_{pr_info['pr_number']}_{time.ctime()}.json",'w')as f:
         json.dump(all_suggestions,f,indent=2,ensure_ascii=False)
+
+    all_opinions_list = []
+
+    for opinions in comment_suggestion_list:
+        for opinion_card in opinions["review"]:
+            all_opinions_list.append(opinion_card)
+
+    for opinions in review_thread_suggestion_list:
+        for opinion_card in opinions["review"]:
+            all_opinions_list.append(opinion_card)
+
+def extract_opinion_graph(opinion_list):
+    """
+    提取 opinion 之间的相互关系，返回结构化的 json 表示多个字图
+    
+    Args:
+        opinion_list (list): list of opinions
+
+    Returns:
+        list: list of subgraphs
+    """
+
+    default_logger.info("start Extracting opinion graph")
+    
+
+
 
 def extract_comment_and_review_pipeline(comments_or_reviews):
     """
@@ -46,9 +70,9 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
     
     Returns:
         list: list of suggestions
-    """
+    """ 
 
-    suggestion_list = []
+    opinion_list = []
     comment_body_list = []
     for comment in comments_or_reviews:
         default_logger.info(f"start process comment [{comment['id']}]")
@@ -60,7 +84,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             'body': comment['body'],
         })
 
-    comment_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comment_body_list,"","",0,0)
+    comment_prompt = prompt.extract_opinion_by_dialog_with_code(comment_body_list,"","",0,0)
     default_logger.debug(f"prompt: [{comment_prompt}]")
 
     retry_times = 5
@@ -69,7 +93,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             model_client = llm_client.get_llm_client("deepseek-chat")
             response = model_client.generate_text([{"role": "user", "content": comment_prompt}])
             default_logger.debug(f"[{comment['id']}] model response: [{response}]")
-            suggestion_list.append({
+            opinion_list.append({
                 "commentId": comment["id"],
                 "review": json.loads(response),
             })
@@ -78,11 +102,18 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             default_logger.error(f"[{comment['id']}] has error: [{e}]")
             retry_times -= 1
             continue
+    
+    default_logger.debug(f"opinion_list extracted: [{opinion_list}]")
 
-    return suggestion_list
+    for opinions in opinion_list:
+        for opinion_card in opinions["review"]:
+            card_id = calculate_sha256_of_dict(opinion_card,"CARD")
+            opinion_card.update({"cardId":card_id})
+
+    return opinion_list
 
 
-def extract_single_review_thread(review_thread,globalDiscussions):
+def extract_single_review_thread(review_thread:list[dict],globalDiscussions):
     """
     提取单个 review thread 的 pipiline
     
@@ -136,7 +167,7 @@ def extract_single_review_thread(review_thread,globalDiscussions):
         default_logger.error(f"[{review_thread['id']}] has no originalLine")
         raise ValueError(f"[{review_thread['id']}] has no originalLine")
     
-    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
+    suggestion_prompt = prompt.extract_opinion_by_dialog_with_code(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
 
     model_client = llm_client.get_llm_client("deepseek-chat")
     default_logger.debug(f"when extract review thread [{review_thread['id']}], suggestion_prompt: [{suggestion_prompt}]")
@@ -168,9 +199,8 @@ def extract_review_thread_pipeline(review_threads,globalDiscussions):
     Returns:
         list: list of suggestions
     """
-    suggestion_list = []
-
-    for review_thread in review_threads:
+    opinion_list = []
+    for review_thread in tqdm.tqdm(review_threads):
         try:
             default_logger.info(f"Start processing review thread {review_thread["id"]}")
             if review_thread["comments"]["nodes"] is None or len(review_thread["comments"]["nodes"])==0:
@@ -185,18 +215,25 @@ def extract_review_thread_pipeline(review_threads,globalDiscussions):
 
             # default_logger.info(f"review_thread: [{review_thread['id']}] has commit: [{commit_just_before['oid']}] just before the comment")
             default_logger.info(f"start to extract suggestion of review_thread: [{review_thread['id']}]")
-            suggestion = extract_single_review_thread(review_thread,globalDiscussions)
+            opinion:list[dict] = extract_single_review_thread(review_thread,globalDiscussions)
 
-            suggestion_list.append({
-                "reviewThreadId": review_thread["id"],
-                "review": suggestion,
-            })
+            for opinion_card in opinion:
+                card_id = calculate_sha256_of_dict(opinion_card,"CARD")
+                opinion_card.update({"cardId":card_id})
+
+            opinion_list.append(
+                {
+                    "reviewThreadId": review_thread["id"],
+                    "opinions": opinion,
+                }
+            )
 
         except Exception as e:
             default_logger.error(f"when extract review thread [{review_thread['id']}], has error: [{e}]")
             continue
+    
         
-    return suggestion_list
+    return opinion_list
 
 def find_commit_just_before_target_time(commits, due_time):
     """
@@ -221,6 +258,11 @@ def find_commit_just_before_target_time(commits, due_time):
         else:
             right = mid - 1 
     return commits[left]
+
+def calculate_sha256_of_dict(dict,prefix):
+    dict_str = json.dumps(dict, ensure_ascii=False, sort_keys=True)
+    sha256_hash = hashlib.sha256(dict_str.encode('utf-8')).hexdigest()
+    return f"{prefix}-{sha256_hash}"
 
 if __name__ == "__main__":
     main()
