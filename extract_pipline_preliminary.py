@@ -60,7 +60,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             'body': comment['body'],
         })
 
-    comment_prompt = prompt.extract_suggestion_by_dialog_with_code(comment_body_list,"","",0,0)
+    comment_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comment_body_list,"","",0,0)
     default_logger.debug(f"prompt: [{comment_prompt}]")
 
     retry_times = 5
@@ -136,7 +136,7 @@ def extract_single_review_thread(review_thread,globalDiscussions):
         default_logger.error(f"[{review_thread['id']}] has no originalLine")
         raise ValueError(f"[{review_thread['id']}] has no originalLine")
     
-    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
+    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
 
     model_client = llm_client.get_llm_client("deepseek-chat")
     default_logger.debug(f"when extract review thread [{review_thread['id']}], suggestion_prompt: [{suggestion_prompt}]")
