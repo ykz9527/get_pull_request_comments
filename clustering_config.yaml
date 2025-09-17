@@ -1,0 +1,63 @@
+# 文本层次聚类算法配置文件
+# 用于配置GitHub PR评论设计建议的聚类分析参数
+
+# 模型配置
+model_name: "all-MiniLM-L6-v2"  # sentence-transformers模型名称
+# 可选模型：
+# - "all-MiniLM-L6-v2": 轻量级，速度快，适合大多数场景
+# - "all-mpnet-base-v2": 更高精度，但计算量更大
+# - "paraphrase-multilingual-MiniLM-L12-v2": 支持多语言
+
+# 聚类参数
+distance_threshold: 0.4  # 距离阈值，值越小簇越多越细分，值越大簇越少越粗略
+linkage_method: "average"  # 链接方法
+# 可选方法：
+# - "average": 平均链接，适合大多数情况
+# - "ward": Ward方法，适合球形簇
+# - "complete": 完全链接，生成紧密的簇
+# - "single": 单一链接，容易产生链式簇
+
+min_cluster_size: 2  # 最小簇大小，小于此值的簇会被合并到最近的大簇
+max_clusters: 20     # 最大簇数量限制
+
+# 文本预处理配置
+text_preprocessing:
+  remove_stopwords: false  # 是否移除停用词
+  lowercase: false         # 是否转换为小写
+  remove_punctuation: false  # 是否移除标点符号
+
+# 可视化配置
+visualization:
+  figsize_dendrogram: [15, 8]      # 树状图尺寸
+  figsize_distribution: [15, 6]    # 分布图尺寸
+  dpi: 300                         # 图片分辨率
+  font_size_dendrogram: 8          # 树状图字体大小
+
+# 输出配置
+output:
+  save_embeddings: false    # 是否保存文本向量
+  save_distance_matrix: false  # 是否保存距离矩阵
+  export_cluster_summaries: true  # 是否导出簇摘要信息
+
+# 性能配置
+performance:
+  batch_size: 32           # 向量生成批次大小
+  show_progress_bar: true  # 是否显示进度条
+  n_jobs: -1              # 并行处理进程数（-1表示使用所有CPU）
+
+# 评估配置
+evaluation:
+  calculate_silhouette: true      # 计算轮廓系数
+  calculate_calinski_harabasz: true  # 计算CH指数
+  
+# 参数优化配置（实验性功能）
+parameter_optimization:
+  enabled: false  # 是否启用自动参数优化
+  threshold_range: [0.2, 0.8]  # 阈值搜索范围
+  threshold_steps: 10           # 阈值搜索步数
+  linkage_methods: ["average", "ward", "complete"]  # 要测试的链接方法
+
+# 日志配置
+logging:
+  level: "INFO"  # 日志级别：DEBUG, INFO, WARNING, ERROR
+  log_to_file: true  # 是否保存日志到文件

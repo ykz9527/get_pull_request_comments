@@ -34,6 +34,7 @@ class OpenaiClient:
         self.model_name = model_name
         self.client = openai.OpenAI(
             base_url="https://openkey.cloud/v1",
+            # base_url="https://api.gptsapi.net/v1",
             api_key=os.environ.get("OPENAI_API_KEY")
         )
 
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     # model_settings = parse_kv_string_to_dict("temperature=0.2;max_tokens=10")
     # print(model_settings)
 
-    client = get_llm_client("gpt-4o-mini")
+    client = get_llm_client("qwen3-coder-480b-a35b-instruct")
     prompt = [{"role": "user", "content": "你好"}]
     print(client.generate_text(prompt))
     pass

@@ -34,28 +34,7 @@ def main():
     with open(f"output/all_suggestions_{pr_info['pr_number']}_{time.ctime()}.json",'w')as f:
         json.dump(all_suggestions,f,indent=2,ensure_ascii=False)
 
-    all_opinions_list = []
 
-    for opinions in comment_suggestion_list:
-        for opinion_card in opinions["review"]:
-            all_opinions_list.append(opinion_card)
-
-    for opinions in review_thread_suggestion_list:
-        for opinion_card in opinions["review"]:
-            all_opinions_list.append(opinion_card)
-
-def extract_opinion_graph(opinion_list):
-    """
-    提取 opinion 之间的相互关系，返回结构化的 json 表示多个字图
-    
-    Args:
-        opinion_list (list): list of opinions
-
-    Returns:
-        list: list of subgraphs
-    """
-
-    default_logger.info("start Extracting opinion graph")
     
 
 
@@ -84,7 +63,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             'body': comment['body'],
         })
 
-    comment_prompt = prompt.extract_opinion_by_dialog_with_code(comment_body_list,"","",0,0)
+    comment_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comment_body_list,"","",0,0)
     default_logger.debug(f"prompt: [{comment_prompt}]")
 
     retry_times = 5
@@ -95,7 +74,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
             default_logger.debug(f"[{comment['id']}] model response: [{response}]")
             opinion_list.append({
                 "commentId": comment["id"],
-                "review": json.loads(response),
+                "opinions": json.loads(response),
             })
             break
         except Exception as e:
@@ -106,7 +85,7 @@ def extract_comment_and_review_pipeline(comments_or_reviews):
     default_logger.debug(f"opinion_list extracted: [{opinion_list}]")
 
     for opinions in opinion_list:
-        for opinion_card in opinions["review"]:
+        for opinion_card in opinions["opinions"]:
             card_id = calculate_sha256_of_dict(opinion_card,"CARD")
             opinion_card.update({"cardId":card_id})
 
@@ -167,9 +146,9 @@ def extract_single_review_thread(review_thread:list[dict],globalDiscussions):
         default_logger.error(f"[{review_thread['id']}] has no originalLine")
         raise ValueError(f"[{review_thread['id']}] has no originalLine")
     
-    suggestion_prompt = prompt.extract_opinion_by_dialog_with_code(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
+    suggestion_prompt = prompt.extract_suggestion_by_dialog_with_code_english(comments_in_review_thread, diffHunk,comment_summary, start_line,end_line)
 
-    model_client = llm_client.get_llm_client("deepseek-chat")
+    model_client = llm_client.get_llm_client("gpt-4o-mini")
     default_logger.debug(f"when extract review thread [{review_thread['id']}], suggestion_prompt: [{suggestion_prompt}]")
 
     retry_times = 5
@@ -259,9 +238,20 @@ def find_commit_just_before_target_time(commits, due_time):
             right = mid - 1 
     return commits[left]
 
-def calculate_sha256_of_dict(dict,prefix):
+def calculate_sha256_of_dict(dict,prefix,length=8):
+    """
+    计算字典的SHA256哈希值
+    
+    Args:
+        dict: 要计算哈希值的字典
+        prefix: ID的前缀
+        length: 哈希值的长度，默认为8位
+    
+    Returns:
+        str: 格式为 "prefix-hash" 的ID字符串
+    """
     dict_str = json.dumps(dict, ensure_ascii=False, sort_keys=True)
-    sha256_hash = hashlib.sha256(dict_str.encode('utf-8')).hexdigest()
+    sha256_hash = hashlib.sha256(dict_str.encode('utf-8')).hexdigest()[:length]
     return f"{prefix}-{sha256_hash}"
 
 if __name__ == "__main__":
